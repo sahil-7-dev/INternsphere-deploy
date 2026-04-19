@@ -1,6 +1,9 @@
 {
   "buildCommand": null,
   "outputDirectory": ".",
+  "rewrites": [
+    { "source": "/api/gemini", "destination": "/api/gemini.js" }
+  ],
   "functions": {
     "api/gemini.js": {
       "memory": 512

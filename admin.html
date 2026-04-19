@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InternSphere — Admin</title>
+
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+
+  <script>(function(){try{var t=localStorage.getItem("theme")||localStorage.getItem("internsphere_theme")||"dark",h=document.documentElement;h.classList.remove("dark","light","theme-dark","theme-light");if(t==="light"){h.classList.add("theme-light","light");h.style.colorScheme="light";h.style.backgroundColor="#f6f8fb"}else{h.classList.add("theme-dark","dark");h.style.colorScheme="dark";h.style.backgroundColor="#111113"}var s=document.createElement("style");s.textContent="html.theme-light body,html.light body{background:#f6f8fb;color:#0f172a}html.theme-dark body,html.dark body{background:#111113;color:rgba(255,255,255,0.95)}";(document.head||document.documentElement).appendChild(s)}catch(e){}})();</script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="css/dashboard-comapny.css">
+  <link rel="stylesheet" href="css/modern.css">
+  <link rel="stylesheet" href="css/ai-theme.css">
+
+  <style>
+    /* ==============================================================
+       Admin-only visual tweaks. The base comes from
+       dashboard-comapny.css; we only add what's unique to the admin
+       surface (amber "ADMIN" brand chip, table layout, modal sheet).
+       ==============================================================
+
+       First: force the company dashboard's exact dark tokens onto this
+       page. Two upstream rules otherwise bleach everything to the
+       Zinc-dark student palette:
+
+         • theme-preload.js injects `html.theme-dark body { background:
+           #111113; color: rgba(255,255,255,.95) }` at load time (anti-
+           flash helper).
+         • modern.css has
+           `html:not(.light) body:not(.theme-light):not(.light) {
+              background: var(--bg-base, #111113) !important }`
+           which !important-stamps the same zinc body on every student
+           page.
+
+       Both are correct for student / marketing pages but wrong here —
+       the admin surface is a different product and should match the
+       company dashboard byte-for-byte. These overrides pin body +
+       canvas to the company palette (dashboard-comapny.css :root
+       declares the real values: --bg #080b10, --surface #111820, etc).
+       `!important` is mandatory to beat the modern.css rule. */
+    html.theme-dark body,
+    html.dark body {
+      background: var(--bg) !important;
+      color:      var(--text) !important;
+    }
+    html.theme-light body,
+    html.light body {
+      /* Light theme still routes through ai-theme.css; we just make
+         sure nothing else stomps on the light bg before that applies. */
+      background: #f6f8fb !important;
+      color:      #0f172a !important;
+    }
+    /* The canvas color behind <body> — matters for the 1-frame moment
+       before the body paints and for any fixed-overlay gaps. Match
+       the company dashboard. */
+    html.theme-dark { background: var(--bg) !important; }
+
+    /* Admin page chrome (sidebar, main, modals) all use tokens that
+       dashboard-comapny.css declares on :root, so they automatically
+       match. But modern.css also stamps card/panel/sidebar surfaces
+       on the "dark student" palette — override those here too so an
+       admin panel isn't subtly lighter than a company-dashboard panel. */
+    html:not(.light) body:not(.theme-light):not(.light) .panel,
+    html:not(.light) body:not(.theme-light):not(.light) .sidebar,
+    html:not(.light) body:not(.theme-light):not(.light) .card {
+      background:    var(--surface);
+      border-color:  var(--line);
+    }
+
+    .admin-chip {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 0.68rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      background: linear-gradient(135deg, #f59e0b, #ef4444);
+      color: #ffffff;
+      margin-left: 8px;
+      vertical-align: middle;
+      box-shadow: 0 6px 18px rgba(245, 158, 11, 0.25);
+    }
+
+    /* Three-tab switcher at the top of the main area. Each tab toggles
+       one of the .admin-section panels below. Active tab uses the
+       brand violet pill. */
+    .admin-tabs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .admin-tab {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--text);
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 160ms ease, border-color 160ms ease;
+    }
+    .admin-tab:hover {
+      background: var(--surface2);
+      border-color: var(--line2);
+    }
+    .admin-tab.is-active {
+      background: linear-gradient(135deg, #7c6bff, #a855f7);
+      color: #ffffff;
+      border-color: transparent;
+    }
+
+    /* Panels that host one admin feature each. Only the active tab's
+       .admin-section is visible at a time — switching is CSS-driven
+       by toggling the [hidden] attribute. */
+    .admin-section[hidden] { display: none; }
+
+    /* Compact table styled for data density. Uses the shared --surface
+       and --line tokens so it adapts to both themes automatically. */
+    .admin-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+    .admin-table thead th {
+      text-align: left;
+      padding: 10px 12px;
+      font-weight: 700;
+      color: var(--text2);
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+      font-size: 0.76rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .admin-table tbody td {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: middle;
+    }
+    .admin-table tbody tr:hover td {
+      background: color-mix(in srgb, var(--surface2) 70%, transparent);
+    }
+    .admin-mono {
+      font-family: var(--mono, ui-monospace, monospace);
+      font-size: 0.78rem;
+      color: var(--text2);
+    }
+
+    /* Row-level action buttons (Suspend / Promote / Delete / Approve). */
+    .admin-btn {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--text);
+      padding: 5px 10px;
+      border-radius: 8px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      cursor: pointer;
+      margin-right: 4px;
+      transition: all 140ms ease;
+    }
+    .admin-btn:hover {
+      background: var(--surface2);
+      border-color: var(--line2);
+    }
+    .admin-btn.is-danger {
+      border-color: rgba(239, 68, 68, 0.35);
+      color: #ef4444;
+    }
+    .admin-btn.is-danger:hover {
+      background: rgba(239, 68, 68, 0.14);
+    }
+    .admin-btn.is-primary {
+      background: linear-gradient(135deg, #7c6bff, #a855f7);
+      color: #ffffff;
+      border-color: transparent;
+    }
+    .admin-btn.is-success {
+      border-color: rgba(34, 197, 94, 0.4);
+      color: #22c55e;
+    }
+    .admin-btn.is-success:hover {
+      background: rgba(34, 197, 94, 0.14);
+    }
+
+    /* Status badges on the user table. */
+    .admin-badge {
+      font-size: 0.7rem;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .admin-badge--ok { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+    .admin-badge--warn { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+    .admin-badge--off { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+    .admin-badge--role-admin   { background: linear-gradient(135deg, rgba(245,158,11,0.2), rgba(239,68,68,0.2)); color: #ef4444; }
+    .admin-badge--role-company { background: rgba(124, 107, 255, 0.15); color: #a855f7; }
+    .admin-badge--role-student { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
+    /* `dev` is a distinct role (triggers the developer-mode greeting on
+       the student dashboard). Green chip keeps it unambiguously apart
+       from Student (blue) at a glance. */
+    .admin-badge--role-dev     { background: rgba(34, 197, 94, 0.15);  color: #22c55e; }
+
+    /* Overall platform-health numbers shown above the Users tab. */
+    .admin-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .admin-stat {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+    }
+    .admin-stat__label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text3);
+      font-weight: 700;
+    }
+    .admin-stat__val {
+      font-size: 1.5rem;
+      font-weight: 800;
+      margin-top: 4px;
+      font-family: var(--mono);
+    }
+
+    /* Search + filter row above each table. */
+    .admin-filters {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .admin-filters input,
+    .admin-filters select {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.86rem;
+      outline: none;
+    }
+    .admin-filters input { flex: 1 1 240px; min-width: 0; }
+    .admin-filters input:focus,
+    .admin-filters select:focus {
+      border-color: var(--accent);
+    }
+
+    /* Empty / loading hints. */
+    .admin-hint {
+      padding: 30px 20px;
+      text-align: center;
+      color: var(--text3);
+      font-size: 0.88rem;
+    }
+
+    /* Reply modal for support inbox. Uses an absolute overlay over the
+       main area; closes when clicked outside the card. */
+    .admin-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 6, 15, 0.6);
+      backdrop-filter: blur(4px);
+      display: grid;
+      place-items: center;
+      z-index: 9999;
+      padding: 20px;
+    }
+    .admin-modal[hidden] { display: none; }
+    .admin-modal__card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      width: min(560px, 100%);
+      max-height: 90vh;
+      overflow: auto;
+      padding: 22px 24px;
+    }
+    .admin-modal__card h3 { margin: 0 0 8px; }
+    .admin-modal__meta {
+      font-size: 0.78rem;
+      color: var(--text3);
+      margin-bottom: 14px;
+      font-family: var(--mono);
+    }
+    .admin-modal__body {
+      background: var(--surface2);
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 0.9rem;
+      line-height: 1.55;
+      margin-bottom: 14px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .admin-modal__card textarea {
+      width: 100%;
+      min-height: 110px;
+      padding: 12px;
+      border-radius: 10px;
+      background: var(--surface2);
+      border: 1px solid var(--line);
+      color: var(--text);
+      resize: vertical;
+      font-family: inherit;
+      font-size: 0.9rem;
+      outline: none;
+    }
+    .admin-modal__actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 12px;
+    }
+
+    /* ────────── Profile-pic affordances ──────────
+       The sidebar .company-card becomes a clickable chip that opens
+       the profile modal. Add a hover state + a faint "click me" cue. */
+    .company-card {
+      cursor: pointer;
+      transition: background 160ms ease;
+    }
+    .company-card:hover {
+      background: var(--surface2);
+    }
+    /* When an avatar has an image, hide the letter-fallback text by
+       making the bg cover the whole chip. */
+    .co-avatar.has-pic {
+      background-size: cover;
+      background-position: center;
+      color: transparent;   /* letter hidden by transparent text */
+    }
+
+    /* Sortable column headers for data tables. */
+    .admin-sort {
+      cursor: pointer;
+      user-select: none;
+      transition: color 140ms ease;
+    }
+    .admin-sort:hover { color: var(--text); }
+    .admin-sort[data-sort-dir]::after {
+      margin-left: 6px;
+      opacity: 0.7;
+      font-size: 0.8em;
+    }
+    .admin-sort[data-sort-dir="asc"]::after  { content: "▲"; }
+    .admin-sort[data-sort-dir="desc"]::after { content: "▼"; }
+
+    /* Pagination strip under a table. */
+    .admin-pager {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .admin-pager[hidden] { display: none; }
+
+    /* Profile-edit modal specifics — preview circle + file input. */
+    .ap-preview {
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      background: var(--surface2);
+      border: 1px solid var(--line);
+      display: grid;
+      place-items: center;
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--text);
+      margin: 0 auto 14px;
+      background-size: cover;
+      background-position: center;
+    }
+    .ap-file-row {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .ap-file-btn {
+      display: inline-block;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--surface2);
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+    .ap-file-btn:hover { background: var(--surface3); }
+    /* Hide the real file input — we only want the styled label to show. */
+    .ap-file-row input[type="file"] {
+      position: absolute;
+      width: 1px; height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .ap-hint {
+      font-size: 0.76rem;
+      color: var(--text3);
+      text-align: center;
+      margin-bottom: 4px;
+    }
+  </style>
+  
+  <link rel="stylesheet" href="https://unpkg.com/lenis@1.1.20/dist/lenis.css" />
+  <script defer src="https://unpkg.com/lenis@1.1.20/dist/lenis.min.js"></script>
+  <script defer src="js/scroll-init.js"></script>
+</head>
+<body>
+
+<div class="dash">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <img decoding="async" class="brand-logo" src="assets/images/Internsphere logo.png" alt="InternSphere">
+      <span class="brand-name">InternSphere <span class="admin-chip">ADMIN</span></span>
+    </div>
+
+    <nav class="sidebar-nav">
+      
+      <a class="nav-item is-active" data-tab="users" href="#">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="2.5"/><path d="M2 14c0-3 3-5 6-5s6 2 6 5"/></svg>
+        Users
+      </a>
+      <a class="nav-item" data-tab="verification" href="#">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5l6 3v4c0 3.5-2.5 5.5-6 6-3.5-.5-6-2.5-6-6v-4l6-3z"/><path d="M5.5 8l2 2 3-4"/></svg>
+        Verification
+      </a>
+      <a class="nav-item" data-tab="support" href="#">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h12v8.5H9.5L7 14.5v-3H2z"/></svg>
+        Support
+        <span class="nav-pill" id="adminSupportBadge" hidden>0</span>
+      </a>
+      <a class="nav-item" data-tab="moderation" href="#">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5l6 3v4c0 3.5-2.5 5.5-6 6-3.5-.5-6-2.5-6-6v-4l6-3z"/><path d="M8 5.5v3"/><circle cx="8" cy="11" r="0.5"/></svg>
+        Moderation
+        <span class="nav-pill" id="adminModerationBadge" hidden>0</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-bottom">
+      
+      <div class="theme-row">
+        <span class="theme-label">Theme</span>
+        <button class="theme-switch" id="themeToggle" type="button" aria-label="Toggle theme">
+          <span class="switch-track">
+            <span class="switch-thumb"></span>
+          </span>
+          <span class="switch-text toggle-label" id="themeLabel">Dark</span>
+        </button>
+      </div>
+
+      <div class="company-card" id="adminProfileChip" role="button" tabindex="0"
+           aria-label="Edit admin profile" title="Change profile picture">
+        <div class="co-avatar" id="adminAvatar">A</div>
+        <div class="co-info">
+          <span class="co-name" id="adminName">Admin</span>
+          <span class="co-role">Platform operator</span>
+        </div>
+      </div>
+      <button id="adminLogoutBtn" class="admin-btn" style="margin-top:12px;width:100%">Sign out</button>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <section class="admin-stats" aria-label="Platform health">
+      <div class="admin-stat"><div class="admin-stat__label">Users</div>        <div class="admin-stat__val" id="statUsers">—</div></div>
+      <div class="admin-stat"><div class="admin-stat__label">Students</div>     <div class="admin-stat__val" id="statStudents">—</div></div>
+      <div class="admin-stat"><div class="admin-stat__label">Companies</div>    <div class="admin-stat__val" id="statCompanies">—</div></div>
+      <div class="admin-stat"><div class="admin-stat__label">Unverified</div>   <div class="admin-stat__val" id="statUnverified">—</div></div>
+      <div class="admin-stat"><div class="admin-stat__label">Support open</div> <div class="admin-stat__val" id="statSupport">—</div></div>
+    </section>
+
+    <!-- Tab switcher + Broadcast action -->
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <nav class="admin-tabs" aria-label="Admin sections" style="margin-bottom:0">
+        <button class="admin-tab is-active" data-tab="users">Users</button>
+        <button class="admin-tab"           data-tab="verification">Verification queue</button>
+        <button class="admin-tab"           data-tab="support">Support inbox</button>
+        <button class="admin-tab"           data-tab="moderation">Moderation</button>
+      </nav>
+      
+      <button class="admin-btn is-primary" id="openBroadcastBtn" type="button">
+        📣 Broadcast
+      </button>
+    </div>
+
+    <section class="admin-section" data-tab-panel="users">
+      <div class="panel">
+        <div class="panel-hd">
+          <span class="panel-title">All users</span>
+          <span class="admin-mono" id="usersCount">0 total</span>
+        </div>
+        <div class="admin-filters">
+          <input type="search" id="userSearch" placeholder="Search by name or email…">
+          <select id="userRoleFilter">
+            <option value="">All roles</option>
+            <option value="admin">Admin</option>
+            <option value="company">Company</option>
+            <option value="student">Student</option>
+            <option value="dev">Dev</option>
+          </select>
+          <select id="userStatusFilter">
+            <option value="">All statuses</option>
+            <option value="active">Active</option>
+            <option value="disabled">Suspended</option>
+          </select>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="admin-table" id="usersTable">
+            <thead>
+              
+              <tr>
+                <th class="admin-sort" data-sort="name">Name</th>
+                <th class="admin-sort" data-sort="email">Email</th>
+                <th class="admin-sort" data-sort="role">Role</th>
+                <th class="admin-sort" data-sort="status">Status</th>
+                <th class="admin-sort" data-sort="createdAt">Joined</th>
+                <th style="text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody><tr><td colspan="6" class="admin-hint">Loading users…</td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="admin-pager" id="usersPager" hidden>
+          <button class="admin-btn" id="usersPagerPrev">‹ Prev</button>
+          <span class="admin-mono" id="usersPagerInfo">Page 1 / 1</span>
+          <button class="admin-btn" id="usersPagerNext">Next ›</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="admin-section" data-tab-panel="verification" hidden>
+      <div class="panel">
+        <div class="panel-hd">
+          <span class="panel-title">Companies awaiting verification</span>
+          <span class="admin-mono" id="verifyCount">0 pending</span>
+        </div>
+        <p class="admin-hint" style="text-align:left;padding:0 0 14px">
+          New company accounts start with <b>verified: false</b>. Approve them to let them post internships; reject to remove the account.
+        </p>
+        <div style="overflow-x:auto">
+          <table class="admin-table" id="verifyTable">
+            <thead>
+              <tr>
+                <th>Company</th>
+                <th>Email</th>
+                <th>About</th>
+                <th>Joined</th>
+                <th style="text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody><tr><td colspan="5" class="admin-hint">Loading queue…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="admin-section" data-tab-panel="support" hidden>
+      <div class="panel">
+        <div class="panel-hd">
+          <span class="panel-title">Support messages</span>
+          <span class="admin-mono" id="supportCount">0 open</span>
+        </div>
+        <div class="admin-filters">
+          <select id="supportStatusFilter">
+            <option value="open">Open</option>
+            <option value="resolved">Resolved</option>
+            <option value="">All</option>
+          </select>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="admin-table" id="supportTable">
+            <thead>
+              <tr>
+                <th>From</th>
+                <th>Message</th>
+                <th>Received</th>
+                <th>Status</th>
+                <th style="text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody><tr><td colspan="5" class="admin-hint">Loading messages…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="admin-section" data-tab-panel="moderation" hidden>
+      <div class="panel">
+        <div class="panel-hd">
+          <span class="panel-title">Reports</span>
+          <span class="admin-mono" id="modCount">0 open</span>
+        </div>
+        <p class="admin-hint" style="text-align:left;padding:0 0 14px">
+          Reports are created by the <b>Report</b> link on internship cards and submission reviews.
+          <b>Dismiss</b> closes the report (no action taken); <b>Take down</b> deletes the reported
+          internship or submission and closes the report.
+        </p>
+        <div class="admin-filters">
+          <select id="modStatusFilter">
+            <option value="open">Open</option>
+            <option value="resolved">Resolved</option>
+            <option value="">All</option>
+          </select>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="admin-table" id="modTable">
+            <thead>
+              <tr>
+                <th>Target</th>
+                <th>Reporter</th>
+                <th>Reason</th>
+                <th>Reported</th>
+                <th>Status</th>
+                <th style="text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody><tr><td colspan="6" class="admin-hint">Loading reports…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="admin-modal" id="adminProfileModal" hidden>
+  <div class="admin-modal__card">
+    <h3>Profile picture</h3>
+    <div class="admin-modal__meta" id="ap_meta">—</div>
+
+    <div class="ap-preview" id="ap_preview"></div>
+    <p class="ap-hint">PNG or JPG · max 2 MB</p>
+
+    <div class="ap-file-row">
+      <label class="ap-file-btn" for="ap_file">Choose image</label>
+      <input type="file" id="ap_file" accept="image/png,image/jpeg,image/webp">
+    </div>
+
+    <div class="admin-modal__actions">
+      <button class="admin-btn" id="ap_close">Cancel</button>
+      <button class="admin-btn is-danger" id="ap_remove">Remove</button>
+      <button class="admin-btn is-primary" id="ap_save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="admin-modal" id="broadcastModal" hidden>
+  <div class="admin-modal__card">
+    <h3>Broadcast notification</h3>
+    <div class="admin-modal__meta" id="bc_meta">—</div>
+
+    <label style="display:block;font-size:0.8rem;font-weight:700;margin-bottom:6px">Audience</label>
+    <select id="bc_audience" style="width:100%;padding:10px 12px;border-radius:10px;background:var(--surface2);border:1px solid var(--line);color:var(--text);margin-bottom:12px">
+      <option value="students">All students (role=student + dev)</option>
+      <option value="companies">All companies</option>
+      <option value="everyone" selected>Everyone (students + companies)</option>
+    </select>
+
+    <label style="display:block;font-size:0.8rem;font-weight:700;margin-bottom:6px">Message</label>
+    <textarea id="bc_message" placeholder="Keep it short — users see this in their notification dropdown."></textarea>
+
+    <div class="admin-modal__actions">
+      <button class="admin-btn" id="bc_close">Cancel</button>
+      <button class="admin-btn is-primary" id="bc_send">Send broadcast</button>
+    </div>
+  </div>
+</div>
+
+<div class="admin-modal" id="supportModal" hidden>
+  <div class="admin-modal__card">
+    <h3 id="sm_subject">Support message</h3>
+    <div class="admin-modal__meta" id="sm_meta">—</div>
+    <div class="admin-modal__body" id="sm_body">—</div>
+    <label style="display:block;font-size:0.8rem;font-weight:700;margin-bottom:6px">Reply (sent as a notification to the user)</label>
+    <textarea id="sm_reply" placeholder="Type your reply…"></textarea>
+    <div class="admin-modal__actions">
+      <button class="admin-btn" id="sm_close">Close</button>
+      <button class="admin-btn" id="sm_resolve">Mark resolved (no reply)</button>
+      <button class="admin-btn is-primary" id="sm_send">Send reply & resolve</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/dashboard-admin.js"></script>
+<script src="js/theme.js"></script>
+  <script src="js/modal-scroll-lock.js"></script>
+</body>
+</html>

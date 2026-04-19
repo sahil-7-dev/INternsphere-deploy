@@ -1,0 +1,58 @@
+/* ===== tokens ===== */
+
+/* ===== anti-flash body background ===== */
+html.theme-light body,
+html.light body {
+  background: #f6f8fb;
+  color: #0f172a;
+}
+html.theme-dark body,
+html.dark body {
+  background: #111113;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+:root {
+  /* ===== layout ===== */
+  --max: 1200px;
+  --radius: 22px;
+
+  /* ===== brand ===== */
+  --brand: #7c6bff;
+  --accent: #a855f7;
+  --pink: #ec4899;
+  --brand-2: #a855f7;
+  --brand-3: #ec4899;
+  --brand-gradient: linear-gradient(135deg, #7c6bff 0%, #a855f7 45%, #ec4899 100%);
+  --brand-gradient-soft: linear-gradient(135deg, rgba(124, 107, 255, 0.14), rgba(236, 72, 153, 0.14));
+
+  /* ===== signal colors ===== */
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #3b82f6;
+
+  /* ===== zinc dark palette ===== */
+  --bg-base: #111113;
+  --bg-a: #111113;
+  --bg-b: #111113;
+  --bg-section: #1c1c1f;
+  --bg-card: #1c1c1f;
+  --bg-inner: #26262a;
+
+  --text: rgba(255, 255, 255, 0.95);
+  --muted: rgba(255, 255, 255, 0.62);
+
+  --surface: #1c1c1f;
+  --surface2: #26262a;
+
+  --navbar-bg: #111113;
+  --footer-bg: #111113;
+  --sidebar-bg: #111113;
+
+  --border: #ffffff12;
+  --border-strong: #ffffff1f;
+
+  --shadow1: 0 10px 30px rgba(0, 0, 0, 0.4);
+  --shadow2: 0 22px 70px rgba(0, 0, 0, 0.7);
+}

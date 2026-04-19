@@ -1,0 +1,19 @@
+{
+  "name": "internsphere",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "InternSphere virtual internship portal — static site + Firebase backend.",
+  "scripts": {
+    "test:unit": "vitest run --dir tests/unit",
+    "test:unit:watch": "vitest --dir tests/unit",
+    "test:rules": "firebase emulators:exec --only firestore \"vitest run --dir tests/rules --no-file-parallelism\"",
+    "test": "npm run test:unit && npm run test:rules"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^10.13.0",
+    "jsdom": "^25.0.0",
+    "vitest": "^2.1.0"
+  }
+}

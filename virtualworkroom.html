@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <!-- NO FLICKER -->
+    <script>(function(){try{var t=localStorage.getItem("theme")||localStorage.getItem("internsphere_theme")||"dark",h=document.documentElement;h.classList.remove("dark","light","theme-dark","theme-light");if(t==="light"){h.classList.add("theme-light","light");h.style.colorScheme="light";h.style.backgroundColor="#f6f8fb"}else{h.classList.add("theme-dark","dark");h.style.colorScheme="dark";h.style.backgroundColor="#111113"}var s=document.createElement("style");s.textContent="html.theme-light body,html.light body{background:#f6f8fb;color:#0f172a}html.theme-dark body,html.dark body{background:#111113;color:rgba(255,255,255,0.95)}";(document.head||document.documentElement).appendChild(s)}catch(e){}})();</script>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Workroom</title>
+
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin />
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="css/virtualworkroom.css" />
+    <link rel="stylesheet" href="css/modern.css" />
+    <link rel="stylesheet" href="css/ai-theme.css" />
+    
+  <link rel="stylesheet" href="https://unpkg.com/lenis@1.1.20/dist/lenis.css" />
+  <script defer src="https://unpkg.com/lenis@1.1.20/dist/lenis.min.js"></script>
+  <script defer src="js/scroll-init.js"></script>
+</head>
+
+  <body data-footer="none">
+
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <div class="left">
+        <button class="wr-menu-btn" id="wrMenuBtn" aria-label="Open tasks" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div class="brand">
+          <img decoding="async" src="assets/images/Internsphere logo.png" alt="Internsphere Logo" class="brand-logo sm" />
+          <span class="brand-name">InternSphere</span>
+        </div>
+      </div>
+
+      <div class="right">
+        <button id="themeToggle" class="ghost-btn">🌙</button>
+        <button id="focusToggle" class="ghost-btn">Focus Mode</button>
+        <button id="exitFocus" class="ghost-btn" style="display:none;">Exit Focus</button>
+        <button id="exitWorkroom" class="ghost-btn danger">Exit Workroom</button>
+        <button id="submitBtn" class="primary-btn" disabled>Submit Task</button>
+        <button class="wr-tars-btn" id="wrTarsBtn" aria-label="Open AI panel" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="wr-backdrop" id="wrBackdrop"></div>
+
+    <!-- MAIN LAYOUT -->
+    <div class="layout">
+
+      <!-- SIDEBAR -->
+      <aside class="sidebar" id="wrSidebar">
+        <h3>Tasks</h3>
+        <div class="progress-wrap">
+          <div class="progress-label" id="progressLabel">Loading…</div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+        </div>
+        <div id="taskList" class="task-list-wrap">
+          <div class="task-empty" style="color:var(--muted);font-size:13px;padding:14px 0;line-height:1.6">
+            Loading your assigned tasks…
+          </div>
+        </div>
+      </aside>
+
+      <!-- WORKSPACE -->
+      
+      <main class="workspace">
+
+        <div class="task-header">
+          <h2>UI Design</h2>
+          <span class="badge">ACTIVE</span>
+          <div class="editor-meta">
+            <span id="wordCount">0 words</span>
+            <span id="charCount">0 chars</span>
+          </div>
+        </div>
+
+        <p class="desc">Design clean UI focusing on usability.</p>
+
+        <div class="toolbar">
+          <button data-cmd="bold">B</button>
+          <button data-cmd="italic">I</button>
+          <button data-cmd="underline">U</button>
+          <button id="undoAI" class="ghost-btn">Undo AI</button>
+        </div>
+
+        <div id="editor" contenteditable="true" class="editor"></div>
+
+        <div class="upload" id="uploadBox">
+          <span id="uploadLabel">Drop files or browse</span>
+          
+          <input type="file" id="fileInput" hidden multiple />
+        </div>
+        <div id="uploadedList"></div>
+
+      </main>
+
+      <aside class="tars" id="wrTars">
+        <div class="tars-header">
+          <span>
+            <img loading="lazy" decoding="async" src="assets/images/icons8-ai-64.png" alt="TARS" width="22" height="22" />
+          </span>
+          <span class="status">● ACTIVE</span>
+          <button id="clearChat" class="clear-btn">Clear</button>
+        </div>
+
+        <div class="console" id="console">
+          <div class="msg bot">System initialized. Awaiting input.</div>
+        </div>
+
+        <div class="tars-suggest is-hidden" id="tarsSuggest">
+          <div class="tars-suggest-title">
+            <span class="tars-suggest-spark">✦</span>
+            Try a prompt
+          </div>
+          <button type="button" class="tars-suggest-item" data-prompt="Fix grammar and spelling mistakes in my document.">
+            <span class="tars-suggest-ico">✏️</span> Fix grammar &amp; spelling
+          </button>
+          <button type="button" class="tars-suggest-item" data-prompt="Make my document sound more formal and professional.">
+            <span class="tars-suggest-ico">👔</span> Make it formal
+          </button>
+          <button type="button" class="tars-suggest-item" data-prompt="Improve the wording and clarity without changing the meaning.">
+            <span class="tars-suggest-ico">💡</span> Improve wording
+          </button>
+          <button type="button" class="tars-suggest-item" data-prompt="Make this shorter and more concise.">
+            <span class="tars-suggest-ico">✂️</span> Shorten it
+          </button>
+          <button type="button" class="tars-suggest-item" data-prompt="Draft a starter document based on the task brief so I can build on it.">
+            <span class="tars-suggest-ico">📝</span> Draft a starter from the task
+          </button>
+          <button type="button" class="tars-suggest-item" data-prompt="What does this task want me to do? Break it down into steps.">
+            <span class="tars-suggest-ico">🔎</span> Break down the task
+          </button>
+          <button type="button" class="tars-suggest-item tars-suggest-custom" id="tarsCustomBtn">
+            <span class="tars-suggest-ico">✎</span> Custom message
+          </button>
+        </div>
+
+        <div class="input-area">
+          <input id="input" placeholder="Command..." />
+          <button id="send">➤</button>
+        </div>
+      </aside>
+
+    </div>
+
+    <!-- COMPLETION MODAL -->
+    <div id="completionModal" class="completion-modal">
+      <div class="completion-card">
+        <div class="completion-confetti">
+          <span></span><span></span><span></span>
+          <span></span><span></span><span></span>
+        </div>
+        <div class="completion-emoji">🎉</div>
+        <h2>Congratulations!</h2>
+        <p>You have successfully submitted all the tasks.</p>
+        <p>The company will review your task submission and you'll receive your internship completion certificate within <strong>1 week</strong>.</p>
+        <p style="font-size:0.9rem;margin-top:10px">In the meantime, your preview certificate is ready to download now:</p>
+        <p style="font-size:0.85rem;opacity:0.75;margin-top:12px">If you don't receive the completion certificate or an update on your submission, please <a href="mailto:InternSphere7@gmail.com?subject=Internship%20completion%20query" style="color:#a855f7;text-decoration:underline">contact us</a>.</p>
+        <div class="completion-ft">
+          <button class="btn btn-primary" id="downloadCertBtn" type="button">⬇ Download Certificate</button>
+          <button class="btn btn-ghost" id="completionOk">Back to Dashboard</button>
+          <button class="btn btn-ghost" id="completionStay">Stay Here</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXIT MODAL -->
+    <div id="exitModal" class="modal hidden">
+      <div class="modal-box">
+        <h3>Exit Workroom?</h3>
+        <p>Progress is saved.</p>
+        <div class="modal-actions">
+          <button id="cancelExit" class="ghost-btn">Cancel</button>
+          <button id="confirmExit" class="ghost-btn danger">Exit</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="js/virtualworkroom.js"></script>
+    <script type="module" src="js/tars-workroom.js"></script>
+    <script src="js/theme.js"></script>
+    <script src="js/ui-dynamic.js"></script>
+    <script src="js/footer.js"></script>
+    <script>
+      (function(){
+        const menuBtn  = document.getElementById('wrMenuBtn');
+        const tarsBtn  = document.getElementById('wrTarsBtn');
+        const sidebar  = document.getElementById('wrSidebar');
+        const tars     = document.getElementById('wrTars');
+        const backdrop = document.getElementById('wrBackdrop');
+        if (!menuBtn || !sidebar) return;
+        const closeAll = () => {
+          sidebar.classList.remove('is-open');
+          tars?.classList.remove('is-open');
+          backdrop?.classList.remove('is-open');
+        };
+        menuBtn.addEventListener('click', () => {
+          tars?.classList.remove('is-open');
+          sidebar.classList.toggle('is-open');
+          backdrop?.classList.toggle('is-open', sidebar.classList.contains('is-open'));
+        });
+        tarsBtn?.addEventListener('click', () => {
+          sidebar.classList.remove('is-open');
+          tars?.classList.toggle('is-open');
+          backdrop?.classList.toggle('is-open', tars.classList.contains('is-open'));
+        });
+        backdrop?.addEventListener('click', closeAll);
+        window.addEventListener('resize', () => { if (window.innerWidth > 1024) closeAll(); });
+      })();
+    </script>
+    <script src="js/modal-scroll-lock.js"></script>
+</body>
+</html>

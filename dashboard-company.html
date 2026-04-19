@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InternSphere — Company Dashboard</title>
+
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+
+  <script>(function(){try{var t=localStorage.getItem("theme")||localStorage.getItem("internsphere_theme")||"dark",h=document.documentElement;h.classList.remove("dark","light","theme-dark","theme-light");if(t==="light"){h.classList.add("theme-light","light");h.style.colorScheme="light";h.style.backgroundColor="#f6f8fb"}else{h.classList.add("theme-dark","dark");h.style.colorScheme="dark";h.style.backgroundColor="#111113"}var s=document.createElement("style");s.textContent="html.theme-light body,html.light body{background:#f6f8fb;color:#0f172a}html.theme-dark body,html.dark body{background:#111113;color:rgba(255,255,255,0.95)}";(document.head||document.documentElement).appendChild(s)}catch(e){}})();</script>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/dashboard-comapny.css">
+  <link rel="stylesheet" href="css/notifications.css">
+  <link rel="stylesheet" href="css/modern.css" />
+  <link rel="stylesheet" href="css/ai-theme.css" />
+  <style>
+    /* Company dashboard notification bell — sits in the top-right of the
+       welcome header. The dropdown uses position:fixed so it anchors to
+       the viewport (the welcome-header has no positioned ancestor we can
+       rely on across sections). Mirrors the student dashboard's bell. */
+    .co-notif-wrap { position: relative; display: inline-flex; }
+    .co-notif-btn {
+      position: relative;
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 160ms ease, border-color 160ms ease;
+    }
+    .co-notif-btn:hover { background: var(--surface2); border-color: var(--line2); }
+    .co-notif-btn .badge {
+      position: absolute;
+      top: -5px; right: -5px;
+      min-width: 18px; height: 18px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #7c6bff, #a855f7);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 800;
+      display: grid;
+      place-items: center;
+      border: 2px solid var(--bg);
+    }
+    /* Anchor the reused .notif-dropdown to the viewport — overrides
+       notifications.css which positions it for the student topbar. */
+    #coNotifDropdown {
+      position: fixed;
+      top: 90px; right: 140px;
+      left: auto;
+    }
+    @media (max-width: 640px) {
+      #coNotifDropdown { left: 12px; right: 12px; top: 72px; }
+    }
+  </style>
+  <link rel="stylesheet" href="https://unpkg.com/lenis@1.1.20/dist/lenis.css" />
+  <script defer src="https://unpkg.com/lenis@1.1.20/dist/lenis.min.js"></script>
+  <script defer src="js/scroll-init.js"></script>
+</head>
+<body data-footer="none">
+<!-- mobile menu toggle -->
+<button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Open menu" aria-controls="companySidebar">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
+<div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+<div class="dash">
+
+  <!-- sidebar -->
+  <aside class="sidebar" id="companySidebar">
+    <div class="sidebar-brand">
+      <img decoding="async" class="brand-logo" src="assets/images/Internsphere logo.png" alt="InternSphere" />
+      <span class="brand-name">InternSphere</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a class="nav-item active" data-section="dashboard" href="#">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>
+        Overview
+      </a>
+      <a class="nav-item" data-section="applications" href="#">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.5 1.5H13a1 1 0 011 1v11a1 1 0 01-1 1H3a1 1 0 01-1-1v-11a1 1 0 011-1h2.5"/><path d="M5.5 1.5h5v2h-5v-2z"/><path d="M4.5 7.5h7M4.5 10.5h4.5"/></svg>
+        Applications
+        <span class="nav-pill" id="nav-badge">0</span>
+      </a>
+      <a class="nav-item" data-section="internships" href="#">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="4" width="14" height="10" rx="1.5"/><path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1"/><path d="M1 8h14"/></svg>
+        Internships
+      </a>
+      <a class="nav-item" data-section="tasks" href="#">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3h10v10H3z"/><path d="M5 6l2 2 4-4"/></svg>
+        Tasks
+      </a>
+      <a class="nav-item" id="openCompanySettings" href="#">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v1M8 13.5v1M1.5 8h1M13.5 8h1M3.2 3.2l.7.7M12.1 12.1l.7.7M12.8 3.2l-.7.7M3.9 12.1l-.7.7"/></svg>
+        Settings
+      </a>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="theme-row">
+        <span class="theme-label">Theme</span>
+        <button class="theme-switch" id="themeToggle" aria-label="Toggle theme">
+          <span class="switch-track">
+            <span class="switch-thumb"></span>
+          </span>
+          <span class="switch-text" id="themeLabel">Dark</span>
+        </button>
+      </div>
+      <div class="company-card">
+        <div class="co-avatar" id="sidebar-avatar">—</div>
+        <div class="co-info">
+          <span class="co-name" id="sidebar-company-name">Loading…</span>
+          <span class="co-role" id="sidebar-role">Administrator</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- main -->
+  <main class="main">
+
+    <!-- dashboard -->
+    <section id="section-dashboard" class="page active">
+      <header class="page-header welcome-header">
+        <div>
+          <div class="welcome-kicker" id="welcomeKicker">—</div>
+          <h1 class="page-title"><span id="welcomeTo">Welcome back,</span> <span id="welcomeCompany" class="welcome-company">—</span></h1>
+          <p class="page-sub" id="greeting">Loading your hiring snapshot…</p>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+          <div style="display:inline-flex;align-items:center;gap:8px">
+            <!-- notification bell -->
+            <div class="co-notif-wrap">
+              <button class="co-notif-btn" id="coNotifBtn" type="button"
+                      aria-label="Notifications" aria-haspopup="true" aria-expanded="false">
+                <svg viewBox="0 0 16 16" width="16" height="16" fill="none"
+                     stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8 1.5a4 4 0 00-4 4v2.5L2.5 10.5h11L12 8v-2.5a4 4 0 00-4-4z"/>
+                  <path d="M6.5 12.5a1.5 1.5 0 003 0"/>
+                </svg>
+                <span class="badge" id="coNotifBadge" hidden>0</span>
+              </button>
+            </div>
+            <time class="page-time" id="last-updated">—</time>
+          </div>
+          <span class="profile-chip" id="profileChip" style="display:none"></span>
+        </div>
+      </header>
+
+      <!-- notification dropdown -->
+      <div id="coNotifDropdown" class="notif-dropdown hidden">
+        <div class="notif-header">
+          <span>Notifications</span>
+          <button id="coMarkAllRead">Mark all read</button>
+        </div>
+        <div id="coNotifList">
+          <p class="notif-empty">No notifications yet.</p>
+        </div>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi-card" data-hue="blue">
+          <div class="kpi-top">
+            <span class="kpi-label">Total Applications</span>
+            <span class="kpi-icon kpi-blue">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.5 1.5H13a1 1 0 011 1v11a1 1 0 01-1 1H3a1 1 0 01-1-1v-11a1 1 0 011-1h2.5"/><path d="M5.5 1.5h5v2h-5v-2z"/></svg>
+            </span>
+          </div>
+          <div class="kpi-val" id="total-apps">0</div>
+          <div class="kpi-bar"><div class="kpi-fill kpi-fill-blue" id="bar-total"></div></div>
+        </div>
+        <div class="kpi-card" data-hue="amber">
+          <div class="kpi-top">
+            <span class="kpi-label">Pending Review</span>
+            <span class="kpi-icon kpi-amber">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4l2.5 2"/></svg>
+            </span>
+          </div>
+          <div class="kpi-val" id="pending-apps">0</div>
+          <div class="kpi-bar"><div class="kpi-fill kpi-fill-amber" id="bar-pending"></div></div>
+        </div>
+        <div class="kpi-card" data-hue="cyan">
+          <div class="kpi-top">
+            <span class="kpi-label">Shortlisted</span>
+            <span class="kpi-icon kpi-cyan">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5l1.8 4.1 4.5.4-3.4 3 1 4.4L8 11l-3.9 2.4 1-4.4-3.4-3 4.5-.4z"/></svg>
+            </span>
+          </div>
+          <div class="kpi-val" id="shortlisted-apps">0</div>
+          <div class="kpi-bar"><div class="kpi-fill kpi-fill-cyan" id="bar-shortlisted"></div></div>
+        </div>
+        <div class="kpi-card" data-hue="emerald">
+          <div class="kpi-top">
+            <span class="kpi-label">Approved</span>
+            <span class="kpi-icon kpi-emerald">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M5 8.5l2 2 4-4"/></svg>
+            </span>
+          </div>
+          <div class="kpi-val" id="approved-apps">0</div>
+          <div class="kpi-bar"><div class="kpi-fill kpi-fill-emerald" id="bar-approved"></div></div>
+        </div>
+        <div class="kpi-card" data-hue="rose">
+          <div class="kpi-top">
+            <span class="kpi-label">Rejected</span>
+            <span class="kpi-icon kpi-rose">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5"/></svg>
+            </span>
+          </div>
+          <div class="kpi-val" id="rejected-apps">0</div>
+          <div class="kpi-bar"><div class="kpi-fill kpi-fill-rose" id="bar-rejected"></div></div>
+        </div>
+      </div>
+
+      <!-- upcoming interviews -->
+      <div class="panel" id="upcoming-interviews-panel" style="display:none;margin-bottom:20px">
+        <div class="panel-hd">
+          <span class="panel-title">Upcoming Interviews</span>
+          <button class="ghost-link" data-goto="applications">See shortlist →</button>
+        </div>
+        <div id="upcoming-interviews-list" class="ui-grid"></div>
+      </div>
+
+      <div class="dash-grid">
+        <div class="panel span-2">
+          <div class="panel-hd">
+            <span class="panel-title">Recent Applications</span>
+            <button class="ghost-link" data-goto="applications">View all →</button>
+          </div>
+          <div id="recent-apps-list" class="feed"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-hd">
+            <span class="panel-title">Roles Distribution</span>
+          </div>
+          <ul id="top-roles" class="role-chart"></ul>
+        </div>
+
+        <div class="panel">
+          <div class="panel-hd">
+            <span class="panel-title">Open Positions</span>
+            <button class="ghost-link" data-goto="internships">Manage →</button>
+          </div>
+          <div id="active-internships-summary" class="open-list"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-hd"><span class="panel-title">Application Breakdown</span></div>
+          <div class="donut-wrap">
+            <svg class="donut" viewBox="0 0 80 80" id="donut-svg">
+              <circle class="donut-track" cx="40" cy="40" r="30"/>
+              <circle class="donut-seg donut-approved"    cx="40" cy="40" r="30" id="seg-approved"/>
+              <circle class="donut-seg donut-shortlisted" cx="40" cy="40" r="30" id="seg-shortlisted"/>
+              <circle class="donut-seg donut-pending"     cx="40" cy="40" r="30" id="seg-pending"/>
+              <circle class="donut-seg donut-rejected"    cx="40" cy="40" r="30" id="seg-rejected"/>
+            </svg>
+            <div class="donut-legend" id="donut-legend"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- applications -->
+    <section id="section-applications" class="page">
+      <header class="page-header">
+        <div>
+          <h1 class="page-title">Applications</h1>
+          <p class="page-sub">Review and action all internship applications.</p>
+        </div>
+        <div class="header-right">
+          <div class="filter-tabs">
+            <button class="ftab active" data-filter="all">All</button>
+            <button class="ftab" data-filter="Pending">Pending</button>
+            <button class="ftab" data-filter="Shortlisted">Shortlisted</button>
+            <button class="ftab" data-filter="Approved">Approved</button>
+            <button class="ftab" data-filter="Rejected">Rejected</button>
+          </div>
+          <div class="search-wrap">
+            <svg class="search-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><path d="M10.5 10.5l3.5 3.5"/></svg>
+            <input class="search-box" id="app-search" placeholder="Search by email or role…">
+          </div>
+          <select id="app-sort" class="app-sort" aria-label="Sort applications">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="unreviewed">Unreviewed first</option>
+          </select>
+        </div>
+      </header>
+      <div id="apps" class="app-grid"></div>
+      <p id="empty-state" class="empty-msg" style="display:none">No applications match this filter.</p>
+    </section>
+
+    <!-- internships -->
+    <section id="section-internships" class="page">
+      <header class="page-header">
+        <div>
+          <h1 class="page-title">Internships</h1>
+          <p class="page-sub">Manage your open, paused, and closed roles.</p>
+        </div>
+        <button class="btn-primary" id="add-internship-btn">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v10M3 8h10"/></svg>
+          Post Role
+        </button>
+      </header>
+      <div id="internships-grid" class="int-grid"></div>
+      <p id="internships-empty" class="empty-msg" style="display:none">No roles posted yet. Create your first one.</p>
+
+      <div id="internship-modal" class="modal-backdrop hidden">
+        <div class="modal-card">
+          <div class="modal-hd">
+            <h3 id="modal-title">Post New Role</h3>
+            <button class="modal-close" id="modal-cancel">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3l10 10M13 3L3 13"/></svg>
+            </button>
+          </div>
+          <div class="field-group">
+            <label>Role Title</label>
+            <input id="field-title" placeholder="e.g. Frontend Developer Intern">
+          </div>
+          <div class="field-row">
+            <div class="field-group">
+              <label>Department</label>
+              <input id="field-dept" placeholder="e.g. Engineering">
+            </div>
+            <div class="field-group">
+              <label>Location</label>
+              <input id="field-location" placeholder="e.g. Mumbai">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field-group">
+              <label>Work mode</label>
+              <select id="field-type">
+                <option value="">Select…</option>
+                <option value="remote">Remote</option>
+                <option value="hybrid">Hybrid</option>
+                <option value="onsite">Onsite</option>
+              </select>
+            </div>
+            <div class="field-group"></div>
+          </div>
+          <div class="field-row">
+            <div class="field-group">
+              <label>Duration</label>
+              <input id="field-duration" placeholder="e.g. 3 months">
+            </div>
+            <div class="field-group">
+              <label>Stipend</label>
+              <input id="field-stipend" placeholder="e.g. ₹10,000/mo">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field-group">
+              <label>Application deadline</label>
+              <input id="field-deadline" type="date">
+            </div>
+            <div class="field-group">
+              <label>Openings</label>
+              <input id="field-openings" type="number" min="1" value="1">
+            </div>
+          </div>
+          <div class="field-group">
+            <label>Skills Required</label>
+            <input id="field-skills" placeholder="e.g. React, Node.js, Python">
+          </div>
+          <div class="field-group">
+            <label>Mission <span style="opacity:0.55;font-weight:400">· short intro / what the team does</span></label>
+            <textarea id="field-mission" rows="3" placeholder="e.g. Help us build delightful spending experiences for millions of users. You'll work with a cross-functional product team…"></textarea>
+          </div>
+          <div class="field-group">
+            <label>Responsibilities <span style="opacity:0.55;font-weight:400">· one per line → rendered as bullets</span></label>
+            <textarea id="field-responsibilities" rows="4" placeholder="Own design for the mobile wallet flow&#10;Run weekly user research sessions&#10;Ship visual QA tickets with engineering"></textarea>
+          </div>
+          <div class="field-group">
+            <label>Requirements <span style="opacity:0.55;font-weight:400">· one per line → rendered as bullets</span></label>
+            <textarea id="field-requirements" rows="4" placeholder="Portfolio showing product thinking&#10;Comfort with Figma or similar&#10;Written communication strength"></textarea>
+          </div>
+          <div class="field-group">
+            <label>Hero image <span style="opacity:0.55;font-weight:400">· optional · used as the banner on the internship page</span></label>
+            <input id="field-hero-image" type="file" accept="image/png,image/jpeg,image/webp">
+            <p id="field-hero-hint" style="font-size:0.75rem;opacity:0.55;margin:6px 0 0">Leave empty to use a random stock photo.</p>
+          </div>
+          <div class="field-group">
+            <label>Short description <span style="opacity:0.55;font-weight:400">· fallback summary on cards</span></label>
+            <textarea id="field-desc" rows="3" placeholder="One paragraph summary of the role (shown on the listing card)."></textarea>
+          </div>
+          <div class="field-group">
+            <label>Status</label>
+            <select id="field-status">
+              <option value="Open">Open</option>
+              <option value="Paused">Paused</option>
+              <option value="Closed">Closed</option>
+            </select>
+          </div>
+          <div class="modal-ft">
+            <button class="btn-ghost" id="modal-cancel-2">Cancel</button>
+            <button class="btn-primary" id="modal-save">Save Role</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- tasks -->
+    <section id="section-tasks" class="page">
+      <header class="page-header">
+        <div>
+          <h1 class="page-title">Tasks</h1>
+          <p class="page-sub">Assign real tasks to interns working on your internships.</p>
+        </div>
+        <div class="header-right">
+          <select id="task-internship-select" class="search-box" style="min-width:220px;padding:10px 14px;border-radius:10px;background:var(--surface2);color:var(--text);border:1px solid var(--line2)">
+            <option value="">— Select internship —</option>
+          </select>
+          <button class="btn-primary" id="open-task-modal-btn" disabled>
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v10M3 8h10"/></svg>
+            Add Task
+          </button>
+        </div>
+      </header>
+
+      <div id="tasks-grid" class="app-grid"></div>
+      <p id="tasks-empty" class="empty-msg" style="display:none">No tasks for this internship yet. Click "Add Task" to create one.</p>
+      <p id="tasks-hint" class="empty-msg">Select an internship above to manage its tasks.</p>
+
+      <!-- submissions modal -->
+      <div id="submissions-modal" class="modal-backdrop hidden">
+        <div class="modal-card" style="max-width:720px">
+          <div class="modal-hd">
+            <h3 id="submissions-modal-title">Submissions</h3>
+            <button class="modal-close" id="submissions-modal-close" type="button">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3l10 10M13 3L3 13"/></svg>
+            </button>
+          </div>
+          <div id="submissions-list" style="display:flex;flex-direction:column;gap:12px;max-height:60vh;overflow-y:auto;padding:4px 2px"></div>
+          <p id="submissions-empty" style="display:none;text-align:center;padding:40px 20px;color:var(--text3, #8a95a3)">No students have submitted this task yet.</p>
+        </div>
+      </div>
+
+      <!-- review modal -->
+      <div id="review-modal" class="modal-backdrop hidden">
+        <div class="modal-card" style="max-width:640px">
+          <div class="modal-hd">
+            <h3>Review Submission</h3>
+            <button class="modal-close" id="review-modal-close" type="button">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3l10 10M13 3L3 13"/></svg>
+            </button>
+          </div>
+          <div class="field-group">
+            <label>Student</label>
+            <div id="review-student" style="font-weight:700;font-size:14px"></div>
+          </div>
+          <div class="field-group">
+            <label style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+              <span>Submission content</span>
+              <button type="button" id="reportSubmissionBtn"
+                      style="font-size:11px;padding:3px 9px;border-radius:8px;border:1px solid rgba(239,68,68,0.35);background:transparent;color:#ef4444;cursor:pointer;font-weight:700">
+                ⚑ Report
+              </button>
+            </label>
+            <div id="review-content" style="max-height:200px;overflow-y:auto;padding:14px;border-radius:10px;background:rgba(0,0,0,0.2);border:1px solid var(--line,rgba(255,255,255,0.08));font-size:13px;line-height:1.6"></div>
+          </div>
+          <div class="field-group" id="review-pdf-row" style="display:none">
+            <label>Attached PDF</label>
+            <a id="review-pdf-link" href="#" download style="color:#a855f7;text-decoration:underline;font-weight:700">Download PDF</a>
+          </div>
+          <div class="field-row">
+            <div class="field-group">
+              <label>Score (0–100)</label>
+              <input type="number" id="review-score" min="0" max="100" value="80">
+            </div>
+            <div class="field-group">
+              <label>Status</label>
+              <select id="review-status">
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected (student can resubmit)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-group">
+              <label>Reviewer Name</label>
+              <input id="review-reviewer-name" placeholder="e.g. Priya Sharma">
+            </div>
+            <div class="field-group">
+              <label>Reviewer Position</label>
+              <select id="review-reviewer-position">
+                <option value="">Select…</option>
+                <option value="CEO">CEO</option>
+                <option value="Head">Head</option>
+                <option value="Manager">Manager</option>
+                <option value="Supervisor">Supervisor</option>
+                <option value="Team Lead">Team Lead</option>
+                <option value="HR">HR</option>
+                <option value="Mentor">Mentor</option>
+                <option value="__custom__">Other (custom…)</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-group" id="review-reviewer-custom-wrap" style="display:none">
+            <label>Custom Position</label>
+            <input id="review-reviewer-custom" placeholder="e.g. Senior Product Designer">
+          </div>
+
+          <div class="field-group">
+            <label>Feedback Note</label>
+            <textarea id="review-note" rows="4" placeholder="Share constructive feedback for the intern…"></textarea>
+          </div>
+          <div class="modal-ft">
+            <button class="btn-ghost" id="review-cancel" type="button">Cancel</button>
+            <button class="btn-primary" id="review-save" type="button">Submit Feedback</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- task modal -->
+      <div id="task-modal" class="modal-backdrop hidden">
+        <div class="modal-card">
+          <div class="modal-hd">
+            <h3 id="task-modal-title">New Task</h3>
+            <button class="modal-close" id="task-modal-cancel" type="button">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3l10 10M13 3L3 13"/></svg>
+            </button>
+          </div>
+          <div class="field-group">
+            <label>Task Title</label>
+            <input id="task-field-title" placeholder="e.g. Build a landing page hero section">
+          </div>
+          <div class="field-group">
+            <label>Description</label>
+            <textarea id="task-field-desc" rows="4" placeholder="Describe what the intern needs to do and deliverables…"></textarea>
+          </div>
+          <div class="field-row">
+            <div class="field-group">
+              <label>Due Date (optional)</label>
+              <input type="date" id="task-field-due">
+            </div>
+            <div class="field-group">
+              <label>Order</label>
+              <input type="number" id="task-field-order" min="1" value="1">
+            </div>
+          </div>
+          <div class="field-group" style="display:flex;align-items:flex-start;gap:10px;padding:12px;border-radius:12px;background:rgba(124,107,255,0.08);border:1px solid rgba(124,107,255,0.2)">
+            <input type="checkbox" id="task-field-requirePdf" style="width:18px;height:18px;margin-top:2px;accent-color:#7c6bff;cursor:pointer">
+            <label for="task-field-requirePdf" style="cursor:pointer;margin:0;line-height:1.4">
+              <strong>Require PDF upload</strong>
+              <div style="font-size:12px;opacity:0.7;margin-top:2px">Student must attach a PDF file before they can submit this task.</div>
+            </label>
+          </div>
+
+          <div class="field-group" style="display:flex;align-items:flex-start;gap:10px;padding:12px;border-radius:12px;background:linear-gradient(135deg,rgba(236,72,153,0.12),rgba(245,158,11,0.1));border:1px solid rgba(236,72,153,0.3)">
+            <input type="checkbox" id="task-field-isFinal" style="width:18px;height:18px;margin-top:2px;accent-color:#ec4899;cursor:pointer">
+            <label for="task-field-isFinal" style="cursor:pointer;margin:0;line-height:1.4">
+              <strong>🏁 Mark as final task</strong>
+              <div style="font-size:12px;opacity:0.75;margin-top:2px">The internship is considered complete only after the student submits this task. Only one task per internship can be the final task — marking this will unmark any previous one.</div>
+            </label>
+          </div>
+          <div class="modal-ft">
+            <button class="btn-ghost" id="task-modal-cancel-2" type="button">Cancel</button>
+            <button class="btn-primary" id="task-modal-save" type="button">Save Task</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- settings modal -->
+<div id="companySettingsModal" class="modal-backdrop hidden">
+  <div class="modal-card modal-card--wide">
+    <div class="modal-hd">
+      <h3>Company Settings</h3>
+      <button class="modal-close" id="closeCompanySettingsModal">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3l10 10M13 3L3 13"/></svg>
+      </button>
+    </div>
+
+    <div class="settings-body">
+      <div class="settings-group">
+        <p class="settings-group-title">Company Profile</p>
+        <div class="settings-row">
+          <input id="companyNameInput" placeholder="Company Name">
+          <button id="updateCompanyNameBtn">Save</button>
+        </div>
+        <p class="settings-status" id="companyNameStatus"></p>
+        <div class="settings-row">
+          <input id="companyLocationInput" placeholder="Location">
+          <button id="updateCompanyLocationBtn">Save</button>
+        </div>
+        <p class="settings-status" id="companyLocationStatus"></p>
+      </div>
+
+      <div class="settings-group">
+        <p class="settings-group-title">Account</p>
+        <div class="settings-row">
+          <input type="email" id="companyEmailInput" placeholder="New email address">
+          <button id="companyEmailBtn">Update</button>
+        </div>
+        <p class="settings-status" id="companyEmailStatus"></p>
+        <div class="settings-row">
+          <input type="password" id="companyPasswordInput" placeholder="New password (min. 6 chars)">
+          <button id="companyPasswordBtn">Update</button>
+        </div>
+        <p class="settings-status" id="companyPasswordStatus"></p>
+      </div>
+
+      <div class="settings-group">
+        <p class="settings-group-title">Support</p>
+        <textarea id="companySupportMessage" placeholder="Describe your issue or question…"></textarea>
+        <div class="settings-row" style="margin-top:8px">
+          <button id="companySupportBtn" style="width:100%">Send to Support</button>
+        </div>
+        <p class="settings-status" id="companySupportStatus"></p>
+      </div>
+
+      <div class="settings-group">
+        <p class="settings-group-title">Security</p>
+        <button id="companyLogoutBtn" class="btn-danger">Sign out</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- company tars -->
+<button class="tars-orb" id="coTarsOrb" type="button" aria-label="Ask TARS">
+  <img loading="lazy" decoding="async" class="tars-orb-img" src="assets/images/icons8-ai-64.png" alt="" aria-hidden="true">
+  <span class="tars-orb-label">TARS</span>
+</button>
+
+<div id="coTarsModal" class="tars-chat-modal" role="dialog" aria-labelledby="coTarsChatTitle" aria-modal="true">
+  <div class="tars-chat-card">
+    <div class="tars-chat-header">
+      <div class="tars-chat-avatar">
+        <img loading="lazy" decoding="async" class="tars-chat-avatar-img" src="assets/images/icons8-ai-64.png" alt="" aria-hidden="true">
+      </div>
+      <div class="tars-chat-id">
+        <div class="tars-chat-kicker">Hiring Assistant</div>
+        <h3 id="coTarsChatTitle">TARS</h3>
+      </div>
+      <button type="button" class="tars-chat-close" id="coTarsChatClose" aria-label="Close">✕</button>
+    </div>
+
+    <div class="tars-chat-thread" id="coTarsChatThread">
+      <div class="tars-chat-msg tars-chat-msg-bot">
+        Hi! I'm TARS — your hiring assistant. I can fetch application stats, rank applicants for a role, or answer questions about your pipeline. Pick a prompt below or write your own.
+      </div>
+    </div>
+
+    <div class="tars-suggest is-hidden" id="coTarsSuggest" aria-label="TARS quick actions"></div>
+
+    <form class="tars-chat-input-row" id="coTarsChatForm">
+      <input id="coTarsChatInput" type="text" placeholder="Ask TARS about applicants, roles, or stats…" autocomplete="off">
+      <button type="submit" class="tars-chat-send" aria-label="Send">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- scripts -->
+<script type="module" src="js/report.js"></script>
+<script type="module" src="js/company-onboarding.js"></script>
+<script type="module" src="js/dashboard-company.js"></script>
+<script type="module" src="js/company-tasks.js"></script>
+<script type="module" src="js/tars-company.js"></script>
+<script src="js/ui-dynamic.js"></script>
+<script src="js/footer.js"></script>
+<script>
+  (function(){
+    const btn = document.getElementById('mobileMenuBtn');
+    const sidebar = document.getElementById('companySidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    if (!btn || !sidebar || !backdrop) return;
+    const close = () => {
+      sidebar.classList.remove('is-open');
+      backdrop.classList.remove('is-open');
+      document.body.style.overflow = '';
+    };
+    const open = () => {
+      sidebar.classList.add('is-open');
+      backdrop.classList.add('is-open');
+      document.body.style.overflow = 'hidden';
+    };
+    btn.addEventListener('click', () => {
+      sidebar.classList.contains('is-open') ? close() : open();
+    });
+    backdrop.addEventListener('click', close);
+    sidebar.querySelectorAll('.nav-item').forEach(el => el.addEventListener('click', close));
+    window.addEventListener('resize', () => { if (window.innerWidth > 1024) close(); });
+  })();
+</script>
+
+<!-- onboarding modal -->
+<div id="onboardingModal" class="onboarding-modal" role="dialog" aria-labelledby="onboardingTitle" aria-modal="true">
+  <div class="onboarding-card">
+    <div class="onboarding-header">
+      <div class="onboarding-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2l9 4v6c0 5-4 9-9 10-5-1-9-5-9-10V6l9-4z"/><path d="M9 12l2 2 4-4"/></svg>
+        <span>Welcome to InternSphere</span>
+      </div>
+      <h2 id="onboardingTitle">Let's set up your company profile</h2>
+      <p>A few details make you look real to applicants. You can edit these anytime from Settings.</p>
+    </div>
+
+    <div class="onboarding-body">
+      <div class="onb-field onb-required">
+        <label>Company Name <span class="req">*</span></label>
+        <input id="onbName" type="text" placeholder="e.g. Nova Systems, TechCorp Inc." autocomplete="organization">
+      </div>
+
+      <div class="onb-row">
+        <div class="onb-field">
+          <label>Industry</label>
+          <select id="onbIndustry">
+            <option value="">Select…</option>
+            <option>Software / IT</option>
+            <option>AI / Machine Learning</option>
+            <option>Fintech</option>
+            <option>E-commerce</option>
+            <option>Education</option>
+            <option>Healthcare</option>
+            <option>Design / Media</option>
+            <option>Consulting</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="onb-field">
+          <label>Team Size</label>
+          <select id="onbSize">
+            <option value="">Select…</option>
+            <option>1–10</option>
+            <option>11–50</option>
+            <option>51–200</option>
+            <option>201–500</option>
+            <option>500+</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="onb-row">
+        <div class="onb-field">
+          <label>Location</label>
+          <input id="onbLocation" type="text" placeholder="Mumbai, IN">
+        </div>
+        <div class="onb-field">
+          <label>Website</label>
+          <input id="onbWebsite" type="url" placeholder="https://your-company.com">
+        </div>
+      </div>
+
+      <div class="onb-field">
+        <label>About <span class="onb-hint">(max 220 chars)</span></label>
+        <textarea id="onbAbout" rows="3" maxlength="220" placeholder="Brief intro — what you build, who you hire for."></textarea>
+      </div>
+
+      <p id="onbStatus" class="onb-status"></p>
+    </div>
+
+    <div class="onboarding-footer">
+      <button type="button" class="btn-ghost" id="onbLater">Complete later</button>
+      <button type="button" class="btn-primary" id="onbSave">Save &amp; continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- gate toast -->
+<div id="gateToast" class="gate-toast">
+  <strong>Finish your company profile first.</strong>
+  <span>Add your company name before posting roles or assigning tasks.</span>
+  <button type="button" id="gateOpen">Complete profile</button>
+</div>
+
+<!-- company profile modal -->
+<div id="companyProfileModal" class="cp-modal" role="dialog" aria-labelledby="cpTitle" aria-modal="true">
+  <div class="cp-card">
+    <!-- banner -->
+    <div class="cp-banner">
+      <button type="button" class="cp-close" id="cpClose" aria-label="Close">✕</button>
+      <div class="cp-kicker">Company Profile</div>
+      <h2 id="cpTitle">Keep your page up to date</h2>
+      <p>What companies show here is what candidates see. Make it count.</p>
+
+      <!-- hiring toggle -->
+      <div class="cp-hiring-row">
+        <span class="cp-hiring-label">Hiring status</span>
+        <label class="cp-toggle">
+          <input type="checkbox" id="cpHiring" checked>
+          <span class="cp-toggle-thumb"></span>
+          <span id="cpHiringLabel">Open</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- logo -->
+    <div class="cp-avatar-row">
+      <div class="cp-logo-wrap" id="cpLogoWrap">
+        <span id="cpLogoInitials">—</span>
+        <img loading="lazy" decoding="async" id="cpLogoImg" alt="" style="display:none">
+      </div>
+      <div class="cp-logo-actions">
+        <label for="cpLogoInput" class="cp-upload-btn">Change logo</label>
+        <input type="file" id="cpLogoInput" accept="image/png,image/jpeg,image/webp" style="display:none">
+        <button type="button" id="cpLogoRemove" class="cp-text-btn" style="display:none">Remove</button>
+      </div>
+
+      <!-- quick stats -->
+      <div class="cp-quickstats">
+        <div class="cp-stat">
+          <div class="cp-stat-val" id="cpStatRoles">0</div>
+          <div class="cp-stat-lbl">Open roles</div>
+        </div>
+        <div class="cp-stat">
+          <div class="cp-stat-val" id="cpStatApps">0</div>
+          <div class="cp-stat-lbl">Applicants</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- scrollable body -->
+    <div class="cp-body">
+      <!-- identity -->
+      <div class="cp-grid-2">
+        <div class="cp-field cp-full">
+          <label>Company Name <span class="cp-req">*</span></label>
+          <input id="cpName" type="text" placeholder="e.g. Nova Systems" autocomplete="organization">
+        </div>
+        <div class="cp-field cp-full">
+          <label>Tagline <span class="cp-hint">one line pitch — max 90</span></label>
+          <input id="cpTagline" maxlength="90" type="text" placeholder="Building the next wave of AI developer tools.">
+        </div>
+        <div class="cp-field">
+          <label>Industry</label>
+          <select id="cpIndustry">
+            <option value="">Select…</option>
+            <option>Software / IT</option>
+            <option>AI / Machine Learning</option>
+            <option>Fintech</option>
+            <option>E-commerce</option>
+            <option>Education</option>
+            <option>Healthcare</option>
+            <option>Design / Media</option>
+            <option>Consulting</option>
+            <option>Manufacturing</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="cp-field">
+          <label>Team Size</label>
+          <select id="cpSize">
+            <option value="">Select…</option>
+            <option>1–10</option>
+            <option>11–50</option>
+            <option>51–200</option>
+            <option>201–500</option>
+            <option>500+</option>
+          </select>
+        </div>
+        <div class="cp-field">
+          <label>Founded</label>
+          <input id="cpFounded" type="number" min="1900" max="2040" placeholder="2018">
+        </div>
+        <div class="cp-field">
+          <label>Location</label>
+          <input id="cpLocation" type="text" placeholder="Mumbai, IN">
+        </div>
+      </div>
+
+      <!-- contact -->
+      <div class="cp-section">
+        <h4>📬 Contact</h4>
+        <div class="cp-grid-2">
+          <div class="cp-field">
+            <label>Email <span class="cp-hint">read-only</span></label>
+            <input id="cpEmail" type="email" disabled>
+          </div>
+          <div class="cp-field">
+            <label>Phone</label>
+            <input id="cpPhone" type="tel" placeholder="+91 98765 43210">
+          </div>
+          <div class="cp-field cp-full">
+            <label>Website</label>
+            <input id="cpWebsite" type="url" placeholder="https://your-company.com">
+          </div>
+        </div>
+      </div>
+
+      <!-- social -->
+      <div class="cp-section">
+        <h4>🔗 Social</h4>
+        <div class="cp-link-row">
+          <span class="cp-link-ico" style="background:rgba(10,102,194,0.18);color:#60a5fa">in</span>
+          <input id="cpLinkedIn" type="url" placeholder="https://linkedin.com/company/your-co">
+        </div>
+        <div class="cp-link-row">
+          <span class="cp-link-ico" style="background:rgba(0,0,0,0.3);color:#fff">X</span>
+          <input id="cpTwitter" type="url" placeholder="https://x.com/your-co">
+        </div>
+        <div class="cp-link-row">
+          <span class="cp-link-ico" style="background:rgba(236,72,153,0.18);color:#ec4899">🌐</span>
+          <input id="cpSite2" type="url" placeholder="https://careers.your-company.com">
+        </div>
+      </div>
+
+      <!-- about -->
+      <div class="cp-section">
+        <h4>📝 About</h4>
+        <div class="cp-field">
+          <label>About <span id="cpAboutCount" class="cp-hint">0 / 400</span></label>
+          <textarea id="cpAbout" rows="5" maxlength="400" placeholder="Who you are, what you build, who you hire for. 2–4 sentences."></textarea>
+        </div>
+      </div>
+
+      <!-- Meta footer -->
+      <div class="cp-meta">
+        <div>
+          <div class="cp-meta-lbl">Member since</div>
+          <div class="cp-meta-val" id="cpMemberSince">—</div>
+        </div>
+        <div>
+          <div class="cp-meta-lbl">Company ID</div>
+          <div class="cp-meta-val cp-mono" id="cpUid">—</div>
+        </div>
+        <div>
+          <div class="cp-meta-lbl">Status</div>
+          <div class="cp-meta-val" id="cpStatus">—</div>
+        </div>
+      </div>
+
+      <p id="cpStatusMsg" class="cp-status"></p>
+    </div>
+
+    <!-- Sticky footer -->
+    <div class="cp-footer">
+      <button type="button" class="btn-ghost" id="cpCancel">Cancel</button>
+      <button type="button" class="btn-primary" id="cpSave">Save Profile</button>
+    </div>
+  </div>
+</div>
+  <script src="js/modal-scroll-lock.js"></script>
+</body>
+</html>

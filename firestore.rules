@@ -1,0 +1,114 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ───────── Helpers ─────────
+    function isAdmin() {
+      return request.auth != null
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // ── APPLICATIONS ─────────────────────────────
+    match /applications/{docId} {
+      allow read: if isAdmin() || (request.auth != null && (
+        resource.data.studentId == request.auth.uid ||
+        resource.data.companyId == request.auth.uid
+      ));
+      allow create: if request.auth != null
+        && request.resource.data.studentId == request.auth.uid;
+      allow update: if isAdmin() || (request.auth != null && (
+        resource.data.studentId == request.auth.uid ||
+        resource.data.companyId == request.auth.uid
+      ));
+      allow delete: if isAdmin();
+    }
+
+    // ── INTERNSHIPS ─────────────────────────────
+    match /internships/{docId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.companyId == request.auth.uid;
+      allow update, delete: if isAdmin() || (request.auth != null
+        && resource.data.companyId == request.auth.uid);
+    }
+
+    // ── COMPANIES ─────────────────────────────
+    match /companies/{uid} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+    }
+
+    // ── STUDENTS ─────────────────────────────
+    match /students/{uid} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+    }
+
+    // ── USERS ─────────────────────────────
+    match /users/{uid} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == uid;
+      allow update: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow delete: if isAdmin();
+    }
+
+    // ── NOTIFICATIONS ─────────────────────────────
+    match /notifications/{docId} {
+      allow create: if request.auth != null
+                    && (
+                      isAdmin()
+                      || request.resource.data.senderUid == request.auth.uid
+                    );
+      allow read, update: if isAdmin() || (request.auth != null
+        && resource.data.studentId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    // ── TASKS ─────────────────────────────
+    match /tasks/{taskId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.companyId;
+      allow update, delete: if isAdmin() || (request.auth != null
+        && request.auth.uid == resource.data.companyId);
+    }
+
+    // ── TASK SUBMISSIONS ─────────────────────────
+    match /taskSubmissions/{subId} {
+      allow read: if isAdmin() || (request.auth != null && (
+        resource.data.studentId == request.auth.uid ||
+        resource.data.companyId == request.auth.uid
+      ));
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.studentId;
+      allow update: if isAdmin() || (request.auth != null && (
+        resource.data.companyId == request.auth.uid ||
+        resource.data.studentId == request.auth.uid
+      ));
+      allow delete: if isAdmin();
+    }
+
+    // ── SUPPORT MESSAGES ─────────────────────────
+    match /supportMessages/{docId} {
+      allow create: if request.auth != null
+                    && request.auth.uid == request.resource.data.uid;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // ── REPORTS (moderation queue) ─────────────────
+    match /reports/{docId} {
+      allow create: if request.auth != null
+                    && request.resource.data.reporterUid == request.auth.uid;
+      allow read, update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // ── ADMIN ACTIONS (audit log) ─────────────────
+    match /adminActions/{docId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+  }
+}

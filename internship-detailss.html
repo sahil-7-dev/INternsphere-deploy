@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Careers - Job Detail</title>
+
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin />
+
+    <script>(function(){try{var t=localStorage.getItem("theme")||localStorage.getItem("internsphere_theme")||"dark",h=document.documentElement;h.classList.remove("dark","light","theme-dark","theme-light");if(t==="light"){h.classList.add("theme-light","light");h.style.colorScheme="light";h.style.backgroundColor="#f6f8fb"}else{h.classList.add("theme-dark","dark");h.style.colorScheme="dark";h.style.backgroundColor="#111113"}var s=document.createElement("style");s.textContent="html.theme-light body,html.light body{background:#f6f8fb;color:#0f172a}html.theme-dark body,html.dark body{background:#111113;color:rgba(255,255,255,0.95)}";(document.head||document.documentElement).appendChild(s)}catch(e){}})();</script>
+
+    <link rel="stylesheet" href="css/internship-details.css" />
+    <link rel="stylesheet" href="css/modern.css" />
+    <link rel="stylesheet" href="css/ai-theme.css" />
+
+    <!-- lenis cdn -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/lenis@1.1.20/dist/lenis.css"
+    />
+
+    <!-- AOS cdn -->
+    <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+    <script defer src="https://unpkg.com/lenis@1.1.20/dist/lenis.min.js"></script>
+    <script defer src="js/scroll-init.js"></script>
+  </head>
+
+  <body data-footer="minimal">
+    <!-- TOP / HEADER -->
+    <header class="site-header">
+      <div class="nav-bar">
+        <div class="container nav-inner">
+          <a class="brand" href="internshipdetails.html" aria-label="Back to internship listings">
+            <span class="brand-word">
+              <img decoding="async" src="assets/images/Internsphere logo.png" alt="" height="40" />
+              InternSphere
+            </span>
+          </a>
+
+          <div class="nav-actions">
+            <button id="themeToggle" class="theme-toggle" aria-label="Toggle theme" type="button">🌙</button>
+            <a class="nav-back" href="internshipdetails.html">
+              <span aria-hidden="true">←</span>
+              <span>Back to listings</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="page">
+      <!-- HERO -->
+      <section class="hero">
+        <div class="hero-container hero-grid">
+          <div class="hero-left">
+            <div class="hero-kicker" aria-label="Role summary">
+              <span id="heroCompany" class="hero-kicker-company">Loading…</span>
+              <span class="hero-kicker-sep" aria-hidden="true">·</span>
+              <span id="heroOpenings" class="hero-kicker-meta">—</span>
+              <span id="heroType" class="hero-type-chip" hidden></span>
+            </div>
+
+            <h1 class="hero-title" id="heroTitle">—</h1>
+            <p class="hero-subtitle" id="heroSubtitle">—</p>
+
+            <div class="hero-chips">
+              <span id="heroDeadline" class="hero-chip hero-chip-deadline" hidden></span>
+              <span id="heroDuration" class="hero-chip" hidden></span>
+              <div id="heroSkills" class="hero-skills"></div>
+            </div>
+
+            <div class="hero-actions">
+              <button class="btn btn-primary" id="applyBtnHero" type="button">Apply now</button>
+              <button class="btn btn-ghost hero-save" id="saveBtn" type="button" aria-pressed="false" aria-label="Save for later">
+                <span class="hero-save-ico" aria-hidden="true">☆</span>
+                <span class="hero-save-label">Save</span>
+              </button>
+            </div>
+
+            <div class="hero-meta">
+              <div class="meta-item">
+                <span class="meta-ico"
+                  ><img
+                    src="assets/images/icons8-location-50.png"
+                    alt=""
+                    width="38px"
+                    height="auto"
+                /></span>
+                <div>
+                  <div class="meta-label">Location</div>
+                  <div class="meta-value">—</div>
+                </div>
+              </div>
+
+              <div class="meta-item">
+                <span class="meta-ico"
+                  ><img
+                    src="assets/images/icons8-time-48.png"
+                    alt=""
+                    width="38px"
+                    height="auto"
+                /></span>
+                <div>
+                  <div class="meta-label">Duration</div>
+                  <div class="meta-value">—</div>
+                </div>
+              </div>
+
+              <div class="meta-item">
+                <span class="meta-ico"
+                  ><img
+                    src="assets/images/icons8-dashboard-100.png"
+                    alt=""
+                    width="38px"
+                    height="38px"
+                /></span>
+                <div>
+                  <div class="meta-label">Salary</div>
+                  <div class="meta-value">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="hero-right">
+            <div class="hero-image" aria-label="Company photo placeholder">
+              <div class="hero-image-inner">
+                <div class="img-tag">
+                  
+                  <img id="heroImg" alt="" width="800" height="600"
+                       decoding="async" fetchpriority="high" />
+                </div>
+              </div>
+            </div>
+            
+            <script>
+              (function () {
+                var params = new URLSearchParams(location.search);
+                var el = document.getElementById("heroImg");
+                if (!el) return;
+                // 1) If the listing passed a company-uploaded banner URL, use
+                //    it directly → no flash on the first paint.
+                var custom = params.get("hero");
+                if (custom) { el.src = custom; return; }
+                // 2) Fallback: deterministic pick from the dynamic folder,
+                //    hashed on the internship id so it's stable per role.
+                var imgs = [
+                  "alex-kotliarskyi-QBpZGqEMsKg-unsplash.jpg",
+                  "ant-rozetsky-HXOllTSwrpM-unsplash.jpg",
+                  "austin-distel-mpN7xjKQ_Ns-unsplash.jpg",
+                  "austin-distel-wD1LRb9OeEo-unsplash.jpg",
+                  "campaign-creators-gMsnXqILjp4-unsplash.jpg",
+                  "campaign-creators-qCi_MzVODoU-unsplash.jpg",
+                  "charlesdeluvio-Lks7vei-eAg-unsplash.jpg",
+                  "christina-wocintechchat-com-m-faEfWCdOKIg-unsplash.jpg",
+                  "mario-gogh-VBLHICVh-lI-unsplash.jpg",
+                ];
+                var id = params.get("id") || "";
+                var h = 0;
+                for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+                el.src = "assets/images/dynamic/" + imgs[Math.abs(h) % imgs.length];
+              })();
+            </script>
+          </div>
+        </div>
+      </section>
+
+      <!-- MIDDLE -->
+      <section class="content-wrap">
+        <div class="tabs">
+          <button class="tab active" type="button">Role details</button>
+          <button class="tab" type="button">Our mission</button>
+          <button class="tab" type="button">Office</button>
+        </div>
+        <div class="container content-grid">
+          <div class="content-left">
+            <article class="card card-pad">
+              <hr class="sep" />
+           <div class="mini-grid">
+  <div class="mini-item">
+    <div class="mini-label">Position</div>
+    <div class="mini-value" id="jobPosition">UI/UX Design Intern</div>
+  </div>
+
+  <div class="mini-item">
+    <div class="mini-label">Employment</div>
+    <div class="mini-value" id="jobEmployment">Onsite</div>
+  </div>
+</div>
+              <h3 class="h3">Your mission</h3>
+              <p class="p" id="jobMission">—</p>
+
+              <h4 class="h4" id="jobRespHeading">Here’s how you’ll be contributing</h4>
+              <ul class="bullets" id="jobResponsibilities"></ul>
+
+              <h4 class="h4" id="jobReqHeading">About you</h4>
+              <ul class="bullets" id="jobRequirements"></ul>
+
+              <div
+                class="info-accordion"
+                data-aos="zoom-in"
+                data-aos-delay="60"
+                data-aos-duration="2000"
+                data-aos-easing="ease"
+              ></div>
+            </article>
+          </div>
+
+          <aside
+            class="content-right"
+            data-aos="zoom-in"
+            data-aos-delay="60"
+            data-aos-duration="1500"
+          >
+            <div class="apply-card">
+              <h3 class="apply-title">Ready to apply?</h3>
+              <p class="apply-sub">
+                Complete the eligibility checklist now and get started with your
+                online application
+              </p>
+
+              <form class="apply-form" id="applyForm">
+
+  <label class="field">
+    <span>Name *</span>
+    <input type="text" id="name" name="name" required />
+  </label>
+
+  <label class="field">
+    <span>Email *</span>
+    <input type="email" id="email" name="email" required />
+  </label>
+
+  <label class="field">
+    <span>Phone *</span>
+    <input type="tel" id="phone" name="phone" required />
+  </label>
+
+  <label class="field">
+    <span>Message to the hiring manager <small style="opacity:0.55;font-weight:400">· optional</small></span>
+    <textarea
+      id="applicantNote"
+      name="applicantNote"
+      rows="3"
+      maxlength="600"
+      placeholder="Why you're a fit. Skip if you've nothing to add."
+    ></textarea>
+  </label>
+
+  <div class="upload">
+    <div class="upload-top">
+      <span class="upload-label">Upload CV (PDF) *</span>
+      <span class="upload-hint" id="cvHint" style="font-size:0.78rem;opacity:0.65">Required · PDF only · max 5 MB</span>
+    </div>
+
+    <input type="file" id="cv" name="cv" accept="application/pdf,.pdf" style="display:none;" required />
+
+    <div class="upload-box" id="uploadBox" role="button" tabindex="0" aria-label="Click or drop a PDF CV">
+      <div class="cloud">☁</div>
+      <div>
+        <div class="upload-main" id="cvMain">Click or drop your PDF CV</div>
+        <div class="upload-sub" id="cvSub">PDF up to 5 MB</div>
+      </div>
+    </div>
+
+    <!-- AI CV Feedback + Smart Pitch -->
+    <div class="ai-actions" id="aiActions" style="display:none;margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
+      <button type="button" class="btn-ai" id="cvFeedbackBtn">
+        <span class="ai-spark">✦</span> Get AI feedback on my CV
+      </button>
+      <button type="button" class="btn-ai" id="pitchBtn">
+        <span class="ai-spark">✨</span> Draft a pitch
+      </button>
+    </div>
+    <div id="aiPanel" class="ai-panel" style="display:none"></div>
+  </div>
+
+  <button class="btn apply-btn" id="applyBtn" type="submit">Apply now</button>
+
+</form>
+
+<div id="applyStatusBanner" class="apply-status-banner" style="display:none"></div>
+
+<p id="successMsg" style="display:none;"></p>
+
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <!-- Application success modal -->
+    <div id="applySuccessModal" class="apply-success-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="applySuccessTitle">
+      <div class="apply-success-backdrop" data-close></div>
+      <div class="apply-success-card" role="document">
+        <div class="apply-success-ico" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="40" height="40" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="24" cy="24" r="21" opacity="0.25"></circle>
+            <path d="M14 24.5l7 7 13-15"></path>
+          </svg>
+        </div>
+        <h3 id="applySuccessTitle">Application submitted</h3>
+        <p>Your application has been received. You can track its status from your dashboard — we'll notify you as soon as the company reviews it.</p>
+        <div class="apply-success-actions">
+          <a class="btn btn-ghost" href="internshipdetails.html">Browse more roles</a>
+          <a class="btn btn-primary" href="dashboard.html">Go to dashboard</a>
+        </div>
+      </div>
+    </div>
+
+    
+    <script type="module" src="js/internship-details.js"></script>
+
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+    <script>
+      AOS.init({
+        // Global settings:
+        disable: false, // accepts following values: 'phone', 'tablet', 'mobile', boolean, expression or function
+        startEvent: "DOMContentLoaded", // name of the event dispatched on the document, that AOS should initialize on
+        initClassName: "aos-init", // class applied after initialization
+        animatedClassName: "aos-animate", // class applied on animation
+        useClassNames: false, // if true, will add content of `data-aos` as classes on scroll
+        disableMutationObserver: false, // disables automatic mutations' detections (advanced)
+        debounceDelay: 50, // the delay on debounce used while resizing window (advanced)
+        throttleDelay: 99, // the delay on throttle used while scrolling the page (advanced)
+
+        // Settings that can be overridden on per-element basis, by `data-aos-*` attributes:
+        offset: 120, // offset (in px) from the original trigger point
+        delay: 0, // values from 0 to 3000, with step 50ms
+        duration: 400, // values from 0 to 3000, with step 50ms
+        easing: "ease", // default easing for AOS animations
+        once: true, // whether animation should happen only once - while scrolling down
+        mirror: false, // whether elements should animate out while scrolling past them
+        anchorPlacement: "top-bottom", // defines which position of the element regarding to window should trigger the animation
+      });
+    </script>
+
+    <button class="tars-orb" id="qaOrb" type="button" aria-label="Ask TARS about this internship">
+      <img loading="lazy" decoding="async" class="tars-orb-img" src="assets/images/icons8-ai-64.png" alt="" aria-hidden="true">
+      <span class="tars-orb-label">TARS</span>
+    </button>
+
+    <div id="qaModal" class="tars-chat-modal" role="dialog" aria-labelledby="qaTitle" aria-modal="true">
+      <div class="tars-chat-card">
+        <div class="tars-chat-header">
+          <div class="tars-chat-id">
+            <div class="tars-chat-kicker">Ask about this role</div>
+            <h3 id="qaTitle">AI Internship Assistant</h3>
+          </div>
+          <button type="button" class="tars-chat-close" id="qaClose" aria-label="Close">✕</button>
+        </div>
+
+        <div class="tars-chat-thread" id="qaThread">
+          <div class="tars-chat-msg tars-chat-msg-bot">
+            Hi! I can answer questions about this internship — requirements, responsibilities, fit with your skills, or anything else from the job description. What would you like to know?
+          </div>
+          <div class="tars-chat-suggestions" id="qaSuggestions">
+            <button type="button" class="tars-chip" data-q="What skills are required for this role?">What skills are required?</button>
+            <button type="button" class="tars-chip" data-q="Is this internship remote or onsite?">Is it remote or onsite?</button>
+            <button type="button" class="tars-chip" data-q="What will I be working on day-to-day?">What will I work on day-to-day?</button>
+            <button type="button" class="tars-chip" data-q="How should I prepare for the interview?">How should I prepare?</button>
+          </div>
+        </div>
+
+        <form class="tars-chat-input-row" id="qaForm">
+          <input id="qaInput" type="text" placeholder="Ask anything about this role…" autocomplete="off">
+          <button type="submit" class="tars-chat-send" aria-label="Send">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <script src="js/theme.js"></script>
+    
+    <script type="module" src="js/main.js"></script>
+    <script type="module" src="js/apply-ai.js"></script>
+    <script type="module" src="js/internship-qa.js"></script>
+    <script src="js/ui-dynamic.js"></script>
+    <script src="js/footer.js"></script>
+    <script src="js/modal-scroll-lock.js"></script>
+</body>
+</html>

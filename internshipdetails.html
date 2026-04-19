@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>InternSphere — Internships</title>
+
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+
+    <script>(function(){try{var t=localStorage.getItem("theme")||localStorage.getItem("internsphere_theme")||"dark",h=document.documentElement;h.classList.remove("dark","light","theme-dark","theme-light");if(t==="light"){h.classList.add("theme-light","light");h.style.colorScheme="light";h.style.backgroundColor="#f6f8fb"}else{h.classList.add("theme-dark","dark");h.style.colorScheme="dark";h.style.backgroundColor="#111113"}var s=document.createElement("style");s.textContent="html.theme-light body,html.light body{background:#f6f8fb;color:#0f172a}html.theme-dark body,html.dark body{background:#111113;color:rgba(255,255,255,0.95)}";(document.head||document.documentElement).appendChild(s)}catch(e){}})();</script>
+
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/internship.css" />
+    <link rel="stylesheet" href="css/modern.css" />
+    <link rel="stylesheet" href="css/ai-theme.css" />
+
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/lenis@1.1.20/dist/lenis.css"
+    />
+
+    <script defer src="https://unpkg.com/lenis@1.1.20/dist/lenis.min.js"></script>
+    <script defer src="js/scroll-init.js"></script>
+
+  </head>
+
+  <body data-footer="minimal">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="container topbar-inner">
+        <a class="brand" href="dashboard.html" aria-label="Back to dashboard">
+          <img decoding="async" src="assets/images/Internsphere logo.png" alt="InternSphere logo" class="brand-logo" />
+          <span class="brand-name">InternSphere</span>
+        </a>
+
+        <div class="topbar-mid">
+          <div class="search">
+            <span class="search-ico" aria-hidden="true">⌕</span>
+            <input id="searchInput" type="text" placeholder="Search internships, companies, skills…" />
+            <kbd class="kbd">Ctrl K</kbd>
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+  <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle theme" aria-pressed="false">
+    <span class="toggle-ico" aria-hidden="true">☀️</span>
+    <span class="toggle-label">Light</span>
+  </button>
+
+    </header>
+
+    <main class="main">
+      <div class="container">
+        <!-- Page head -->
+        <div class="page-head">
+          <div>
+            <h1>Internships</h1>
+            <p class="muted">Browse roles, filter fast, and apply in one click.</p>
+          </div>
+
+          <div class="page-actions">
+            <button class="btn btn-ghost" type="button" id="clearFilters">Clear filters</button>
+            <button class="btn btn-ghost" type="button" id="savedToggle" aria-pressed="false">
+              <span id="savedToggleLabel">☆ Saved (0)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Layout -->
+        <section class="layout">
+          
+          <aside class="filters" id="filters">
+            <div class="filters-head">
+              <b>Filters</b>
+            </div>
+
+            <div class="filter-block">
+              <label class="label">Role / Keyword</label>
+              <input class="input" id="keyword" placeholder="e.g. frontend, node, UI…" />
+            </div>
+
+            <div class="filter-block">
+              <label class="label">Location</label>
+              <select class="input" id="location">
+                <option value="">Any</option>
+                <option>Mumbai</option>
+                <option>Pune</option>
+                <option>Bangalore</option>
+                <option>Remote</option>
+              </select>
+            </div>
+
+            <div class="filter-block">
+              <label class="label">Type</label>
+              <div class="chips">
+                <button class="chip active" data-type="">All</button>
+                <button class="chip" data-type="remote">Remote</button>
+                <button class="chip" data-type="hybrid">Hybrid</button>
+                <button class="chip" data-type="onsite">Onsite</button>
+              </div>
+            </div>
+
+            <div class="filter-block">
+              <label class="label">Duration</label>
+              <div class="chips">
+                <button class="chip active" data-duration="">Any</button>
+                <button class="chip" data-duration="1-2">1–2 mo</button>
+                <button class="chip" data-duration="3-4">3–4 mo</button>
+                <button class="chip" data-duration="6+">6+ mo</button>
+              </div>
+            </div>
+
+            <div class="filter-block">
+              <label class="label">Skills</label>
+              <div class="chips chips-wrap" id="skillChips">
+                <button class="chip" data-skill="html">HTML</button>
+                <button class="chip" data-skill="css">CSS</button>
+                <button class="chip" data-skill="js">JavaScript</button>
+                <button class="chip" data-skill="node">Node.js</button>
+                <button class="chip" data-skill="sql">SQL</button>
+                <button class="chip" data-skill="git">Git</button>
+              </div>
+            </div>
+
+            <div class="filter-block">
+              <label class="label">Sort</label>
+              <select class="input" id="sortBy">
+                <option value="latest">Latest</option>
+                <option value="match">Best match</option>
+                <option value="company">Company A–Z</option>
+              </select>
+            </div>
+
+            <div class="filters-foot">
+              <button class="btn btn-primary" id="applyFilters" type="button">Apply</button>
+              <button class="btn btn-ghost" id="resetFilters" type="button">Reset</button>
+            </div>
+          </aside>
+
+          <!-- Results -->
+          <section class="results">
+            <div class="stats">
+              <div class="stat">
+                <b id="resultCount">0</b>
+                <span class="muted">results</span>
+              </div>
+              <div class="stat">
+                <b id="avgMatch">—</b>
+                <span class="muted">avg. skill match</span>
+              </div>
+              <div class="stat">
+                <b id="savedCount">0</b>
+                <span class="muted">saved</span>
+              </div>
+            </div>
+
+            <div class="cards" id="cards"></div>
+
+            <div class="pager">
+              <button class="btn btn-ghost" type="button">← Prev</button>
+              <div class="muted">Page 1 of 3</div>
+              <button class="btn btn-ghost" type="button">Next →</button>
+            </div>
+          </section>
+        </section>
+
+      </div>
+    </main>
+
+   <script type="module" src="js/report.js"></script>
+   <script type="module" src="js/internship.js"></script>
+   <script src="js/theme.js"></script>
+   <script src="js/ui-dynamic.js"></script>
+   <script src="js/footer.js"></script>
+    <script src="js/modal-scroll-lock.js"></script>
+</body>
+</html>

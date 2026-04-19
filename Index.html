@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>InternSphere — Virtual Internship Portal</title>
+    <meta
+      name="description"
+      content="InternSphere is a modern virtual internship portal to manage applications, tasks, and progress."
+    />
+
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/lenis@1.1.20/dist/lenis.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/aos@next/dist/aos.css"
+    />
+
+    <script>(function(){try{var t=localStorage.getItem("theme")||localStorage.getItem("internsphere_theme")||"dark",h=document.documentElement;h.classList.remove("dark","light","theme-dark","theme-light");if(t==="light"){h.classList.add("theme-light","light");h.style.colorScheme="light";h.style.backgroundColor="#f6f8fb"}else{h.classList.add("theme-dark","dark");h.style.colorScheme="dark";h.style.backgroundColor="#111113"}var s=document.createElement("style");s.textContent="html.theme-light body,html.light body{background:#f6f8fb;color:#0f172a}html.theme-dark body,html.dark body{background:#111113;color:rgba(255,255,255,0.95)}";(document.head||document.documentElement).appendChild(s)}catch(e){}})();</script>
+
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/global.css" />
+    <link rel="stylesheet" href="css/modern.css" />
+    <link rel="stylesheet" href="css/ai-theme.css" />
+
+  </head>
+
+  <body class="page-index" data-lenis-duration="1.4">
+    <!-- nav -->
+    <header class="nav">
+      <div class="container nav-inner">
+        <a
+          class="brand"
+          href="#"
+          aria-label="InternSphere Home"
+          data-logo-has-text="true"
+        >
+          <img
+            class="brand-logo"
+            src="assets/images/Internsphere logo.png"
+            alt="InternSphere logo"
+          />
+          <span class="brand-name">InternSphere</span>
+        </a>
+
+        <nav class="nav-mid" aria-label="Primary">
+          <ul class="nav-links" id="navLinks">
+            <li><a href="#hero" class="nav-link active">Home</a></li>
+            <li><a href="#features" class="nav-link">Features</a></li>
+            <li><a href="#how" class="nav-link">How it works</a></li>
+            <li><a href="mailto:InternSphere7@gmail.com?subject=InternSphere%20enquiry" class="nav-link">Contact</a></li>
+            <span class="nav-indicator" aria-hidden="true"></span>
+          </ul>
+        </nav>
+
+        <div class="nav-actions">
+          <button
+            class="theme-toggle"
+            id="themeToggle"
+            type="button"
+            aria-label="Toggle theme"
+            title="Toggle theme"
+          >
+            <span class="toggle-ico" aria-hidden="true">🌙</span>
+            <span class="toggle-label">Theme</span>
+          </button>
+
+          <a href="login.html" class="btn btn-ghost">Log in</a>
+          <a href="login.html" class="btn btn-primary">Sign up</a>
+
+          <button
+            class="hamburger"
+            id="hamburger"
+            type="button"
+            aria-label="Open menu"
+            aria-controls="navLinks"
+            aria-expanded="false"
+          >
+            <span></span><span></span><span></span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <!-- hero -->
+      <section id="hero" class="hero">
+        <div class="hero-bg" aria-hidden="true">
+          <div class="glow g1"></div>
+          <div class="glow g2"></div>
+          <div class="noise"></div>
+          <div class="grid"></div>
+        </div>
+
+        <div class="container hero-inner">
+          <div class="hero-left">
+            <h1 class="hero-title">
+              Showcase your work like a
+              <span
+                class="grad rotator"
+                data-words='["product.","portfolio.","career.","brand."]'
+                >product.</span
+              >
+              <br />
+              Manage internships like a
+              <span
+                class="grad rotator"
+                data-words='["platform.","workflow.","system.","dashboard."]'
+                >platform.</span
+              >
+            </h1>
+
+            <p class="hero-sub">
+              InternSphere connects students and companies in one AI-powered
+              platform to manage internships, track progress, and showcase real
+              work experience.
+            </p>
+
+            <div class="hero-cta">
+              <a class="btn btn-primary btn-lg" href="login.html">Get started</a>
+              <a class="btn btn-ghost btn-lg" href="#features">See features</a>
+            </div>
+
+            <div class="hero-badges">
+              <span class="mini-badge">AI Resume Feedback</span>
+              <span class="mini-badge">Workroom Tasks</span>
+              <span class="mini-badge">Progress Timeline</span>
+            </div>
+          </div>
+
+          <div class="hero-right">
+            <div class="hero-panel">
+              <div class="hero-mockup">
+                <div class="mockup-shell">
+                  <div class="mockup-top">
+                    <div class="mockup-dots">
+                      <span></span><span></span><span></span>
+                    </div>
+
+                    <div class="mockup-title">
+                      InternSphere — <span class="ai-rotate">AI Mentor</span>
+                    </div>
+
+                    <div class="mockup-live">
+                      <span class="live-dot"></span>
+                      <span>PREVIEW</span>
+                    </div>
+                  </div>
+
+                  <div class="mockup-body">
+                    <div class="mockup-card mockup-card--primary">
+                      <div class="card-head">
+                        <div class="card-kicker">Active Internship</div>
+                        <div class="pill">Week <strong>3</strong> / 8</div>
+                      </div>
+
+                      <div class="card-title">Front-End Developer</div>
+                      <div class="card-sub">ByteLabs • Remote • Mentor-guided</div>
+
+                      <div class="progress">
+                        <div class="progress-top">
+                          <span>Progress</span>
+                          <strong>64%</strong>
+                        </div>
+                        <div class="progress-track">
+                          <div class="progress-fill" style="--p:64;"></div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="mockup-grid2">
+                      <div class="mockup-card">
+                        <div class="card-kicker">AI Readiness</div>
+
+                        <div class="ring">
+                          <svg viewBox="0 0 120 120" class="ring-svg" aria-hidden="true">
+                            <circle class="ring-bg" cx="60" cy="60" r="46"></circle>
+                            <circle
+                              class="ring-fg"
+                              cx="60"
+                              cy="60"
+                              r="46"
+                              style="--val:78;"
+                            ></circle>
+                          </svg>
+
+                          <div class="ring-center">
+                            <div class="ring-val">78%</div>
+                            <div class="ring-lbl">match</div>
+                          </div>
+                        </div>
+
+                        <div class="mini-row">
+                          <span class="mini-tag">ATS</span>
+                          <strong>82</strong>
+                          <span class="mini-sep">•</span>
+                          <span class="mini-tag">Skills</span>
+                          <strong>71</strong>
+                        </div>
+                      </div>
+
+                      <div class="mockup-card">
+                        <div class="card-kicker">Today</div>
+
+                        <div class="stat-stack">
+                          <div class="stat">
+                            <span class="stat-ico">✔</span>
+                            <div class="stat-text">
+                              <div class="stat-top"><strong>5</strong> Completed</div>
+                              <div class="stat-sub">Task submissions</div>
+                            </div>
+                          </div>
+
+                          <div class="stat">
+                            <span class="stat-ico stat-ico--warn">⏳</span>
+                            <div class="stat-text">
+                              <div class="stat-top"><strong>2</strong> Pending</div>
+                              <div class="stat-sub">In review queue</div>
+                            </div>
+                          </div>
+
+                          <div class="stat">
+                            <span class="stat-ico stat-ico--info">💬</span>
+                            <div class="stat-text">
+                              <div class="stat-top"><strong>1</strong> Feedback</div>
+                              <div class="stat-sub">Mentor notes</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="ai-tip">
+                      <span class="ai-chip">AI Insight</span>
+                      <span class="ai-text">
+                        <span
+                          class="ai-dyn ai-dyn--small"
+                          data-words="Suggestion: Improve REST APIs + state management.|Tip: Add Git branches + PR workflow.|Insight: Boost ATS score with quantified projects.|Hint: Focus on responsiveness + accessibility."
+                        ></span>
+                      </span>
+                      <span class="ai-spark" aria-hidden="true">✦</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- features -->
+      <section id="features" class="section section-soft">
+        <div class="container">
+          <div class="head">
+            <span class="kicker">FEATURES</span>
+            <h2>Everything you need for a complete virtual internship experience</h2>
+            <p class="muted">
+              AI assistance, real project workflows, and internship management in one platform.
+            </p>
+          </div>
+
+          <div
+            class="grid3"
+            data-aos="fade-up"
+            data-aos-delay="60"
+            data-aos-duration="1200"
+            data-aos-easing="ease"
+          >
+            <article class="card">
+              <div class="card-ico">
+                <img loading="lazy" decoding="async" src="assets/images/AI icon.svg" alt="AI icon" />
+              </div>
+              <h3>AI Resume Analyzer</h3>
+              <p>Upload your CV and instantly see an ATS score, skill match, and concrete tips to improve your next application.</p>
+              <ul>
+                <li>ATS score &amp; improvement tips</li>
+                <li>Skill gaps vs. target roles</li>
+                <li>Latest analysis always on your dashboard</li>
+              </ul>
+            </article>
+
+            <article class="card">
+              <div class="card-ico">
+                <img loading="lazy" decoding="async" src="assets/images/icons8-dashboards-32.png" alt="Dashboard icon" />
+              </div>
+              <h3>Smart Dashboard</h3>
+              <p>Save roles for later, watch your application status, and see upcoming interviews at a glance.</p>
+              <ul>
+                <li>Save-for-later across listing &amp; detail</li>
+                <li>Upcoming interview card with your timezone</li>
+                <li>Live ATS, applications, and tasks stats</li>
+              </ul>
+            </article>
+
+            <article class="card">
+              <div class="card-ico">
+                <img loading="lazy" decoding="async" src="assets/images/icons8-work-50.png" alt="Workroom icon" />
+              </div>
+              <h3>Virtual Workroom</h3>
+              <p>Once you're approved, step into a dedicated workroom — tasks, submissions, and feedback in one place.</p>
+              <ul>
+                <li>Tasks &amp; submissions</li>
+                <li>Mentor feedback with scores</li>
+                <li>Progress &amp; final task</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- differentiators -->
+      <section id="why" class="section" data-aos="fade-up" data-aos-duration="900">
+        <div class="container">
+          <div class="head">
+            <span class="kicker">WHY INTERNSPHERE</span>
+            <h2>What sets us apart</h2>
+            <p class="muted">Unlike general job boards, InternSphere is purpose-built for how internships actually work — from application to real project experience.</p>
+          </div>
+
+          <div class="diff-grid">
+            <article class="diff-item" data-aos="fade-up" data-aos-delay="40">
+              <div class="diff-num">01</div>
+              <h3>Dedicated to internships</h3>
+              <p>InternSphere is built exclusively for internships, not adapted from a general job board — so students aren't competing against experienced professionals for the same listings.</p>
+            </article>
+
+            <article class="diff-item" data-aos="fade-up" data-aos-delay="80">
+              <div class="diff-num">02</div>
+              <h3>Real work in the Virtual Workroom</h3>
+              <p>Selected candidates don't just get hired — they enter a workspace with real tasks, submissions, and mentor feedback, earning a verified completion certificate at the end.</p>
+            </article>
+
+            <article class="diff-item" data-aos="fade-up" data-aos-delay="120">
+              <div class="diff-num">03</div>
+              <h3>AI built for the student</h3>
+              <p>Most platforms offer AI for recruiters. InternSphere places intelligent guidance on the student's side — reviewing CVs, suggesting improvements, and answering questions throughout the journey.</p>
+            </article>
+
+            <article class="diff-item" data-aos="fade-up" data-aos-delay="160">
+              <div class="diff-num">04</div>
+              <h3>Context-aware, not generic</h3>
+              <p>AI features read the specific role, the student's CV, and their submitted work — offering recommendations grounded in context rather than broad matching models.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ai spotlight -->
+      <section id="ai" class="section ai-section" data-aos="fade-up" data-aos-duration="900">
+        <div class="container">
+          <div class="head">
+            <span class="kicker">✦ AI ASSISTANCE</span>
+            <h2>AI grounded in your actual work</h2>
+            <p class="muted">
+              Every tool reads what's in front of it — your CV, the role brief, your submitted tasks — so recommendations stay specific to you, not generic.
+            </p>
+          </div>
+
+          <div class="ai-grid">
+            <article class="ai-card" data-aos="fade-up" data-aos-delay="40">
+              <div class="ai-card-ico">✦</div>
+              <h3>TARS Assistant</h3>
+              <p>A personal AI assistant that answers questions about your applications, tasks, and progress — grounded in your actual profile data.</p>
+              <div class="ai-card-tag">Dashboard · Workroom</div>
+            </article>
+
+            <article class="ai-card" data-aos="fade-up" data-aos-delay="80">
+              <div class="ai-card-ico">📄</div>
+              <h3>Resume Analyzer</h3>
+              <p>Receive an ATS score, skill match, and targeted rewrite suggestions for your CV. Your latest analysis is retained on your profile for ongoing review.</p>
+              <div class="ai-card-tag">Student dashboard</div>
+            </article>
+
+            <article class="ai-card" data-aos="fade-up" data-aos-delay="120">
+              <div class="ai-card-ico">🎯</div>
+              <h3>Smart CV Feedback</h3>
+              <p>A one-click review on the apply form that evaluates your CV against each role — fit percentage, strengths, gaps, and recommended improvements before submission.</p>
+              <div class="ai-card-tag">Apply form</div>
+            </article>
+
+            <article class="ai-card" data-aos="fade-up" data-aos-delay="160">
+              <div class="ai-card-ico">💬</div>
+              <h3>Role Insights</h3>
+              <p>An AI assistant on every internship page that understands the role's responsibilities and requirements — offering tailored guidance on expectations and interview preparation.</p>
+              <div class="ai-card-tag">Every role</div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- how -->
+      <section id="how" class="section">
+        <div class="container">
+          <div
+            class="head"
+            data-aos="fade-up"
+            data-aos-delay="60"
+            data-aos-duration="1000"
+            data-aos-easing="ease"
+          >
+            <span class="kicker">HOW IT WORKS</span>
+            <h2>From application to certificate — in four steps</h2>
+            <p class="muted">A streamlined experience designed to get students working on real internships faster.</p>
+          </div>
+
+          <div
+            class="steps"
+            data-aos="zoom-out"
+            data-aos-delay="60"
+            data-aos-duration="1000"
+            data-aos-easing="ease"
+          >
+            <div class="step">
+              <div class="step-num">1</div>
+              <div class="step-body">
+                <h3>Create your account</h3>
+                <p class="muted">Sign up as a student or a company and set up your profile in minutes.</p>
+              </div>
+            </div>
+
+            <div class="step">
+              <div class="step-num">2</div>
+              <div class="step-body">
+                <h3>Discover &amp; apply to roles</h3>
+                <p class="muted">Browse curated internships, save the ones that interest you, and apply with a single click.</p>
+              </div>
+            </div>
+
+            <div class="step">
+              <div class="step-num">3</div>
+              <div class="step-body">
+                <h3>Interview with ease</h3>
+                <p class="muted">Selected candidates are invited to interviews scheduled in their local timezone — tracked directly on the dashboard.</p>
+              </div>
+            </div>
+
+            <div class="step">
+              <div class="step-num">4</div>
+              <div class="step-body">
+                <h3>Work &amp; earn your certificate</h3>
+                <p class="muted">Collaborate in the Virtual Workroom, complete assigned tasks, and receive a verified completion certificate.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- who it's for -->
+      <section id="who" class="section section-soft" data-aos="fade-up" data-aos-duration="900">
+        <div class="container">
+          <div class="head">
+            <span class="kicker">BUILT FOR BOTH SIDES</span>
+            <h2>Two audiences, one platform</h2>
+            <p class="muted">Students learn what real work looks like. Companies meet real talent — without the hiring overhead.</p>
+          </div>
+
+          <div class="who-grid">
+            <article class="who-card who-card--students" data-aos="fade-up" data-aos-delay="40">
+              <div class="who-head">
+                <span class="who-tag">For Students</span>
+                <h3>Real projects, real feedback</h3>
+              </div>
+              <ul class="who-list">
+                <li><strong>Apply once.</strong> Attach a PDF CV — AI reviews it against the role before you submit.</li>
+                <li><strong>Work in the Workroom.</strong> Submit tasks with a rich editor, drafts auto-save, TARS helps you draft and polish.</li>
+                <li><strong>See your feedback.</strong> Scores, notes, reviewer names — directly on your dashboard, not in an inbox.</li>
+                <li><strong>Earn a completion certificate.</strong> Finish the company's final task to unlock it.</li>
+              </ul>
+              <a class="btn btn-primary" href="login.html">Start as a student</a>
+            </article>
+
+            <article class="who-card who-card--companies" data-aos="fade-up" data-aos-delay="120">
+              <div class="who-head">
+                <span class="who-tag">For Companies</span>
+                <h3>Hire with AI-assisted triage</h3>
+              </div>
+              <ul class="who-list">
+                <li><strong>Post detailed roles.</strong> Mission, responsibilities, requirements, deadline, openings, and work mode — all in one place.</li>
+                <li><strong>Review faster with AI.</strong> Every application carries the CV; TARS summarises strengths, gaps, and fit against your role.</li>
+                <li><strong>Shortlist &amp; schedule interviews.</strong> Pick a slot in the candidate's timezone. Reschedule or reject with a reason in a click.</li>
+                <li><strong>Assign and approve tasks</strong> in the Workroom and close out with a completion certificate.</li>
+              </ul>
+              <a class="btn btn-primary" href="login.html">Start as a company</a>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- final cta -->
+      <section id="get-started" class="section cta-section" data-aos="fade-up" data-aos-duration="900">
+        <div class="container">
+          <div class="cta-banner">
+            <div class="cta-banner-body">
+              <span class="kicker">GET STARTED</span>
+              <h2>Ready to experience a smarter internship journey?</h2>
+              <p class="muted">Join InternSphere today — whether you're a student seeking your next opportunity or a company looking to discover talent through real work.</p>
+            </div>
+            <div class="cta-banner-actions">
+              <a class="btn btn-primary btn-lg" href="login.html">Start as a student</a>
+              <a class="btn btn-ghost btn-lg" href="login.html">Start as a company</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- faq -->
+      <section id="faq" class="section" data-aos="fade-up" data-aos-duration="900">
+        <div class="container">
+          <div class="head">
+            <span class="kicker">QUESTIONS</span>
+            <h2>Frequently asked</h2>
+            <p class="muted">Straight answers. If yours isn't here, <a href="mailto:InternSphere7@gmail.com?subject=InternSphere%20question" class="faq-contact">email us</a>.</p>
+          </div>
+
+          <div class="faq-list">
+            <details class="faq-item" open>
+              <summary>Is InternSphere a live product?</summary>
+              <p>Not yet. InternSphere is currently a concept project — a fully functional prototype demonstrating what a modern, AI-assisted internship platform could look like. It isn't operating at a global or country-wide scale, and real companies and students aren't active on it today. The product vision, flows, and AI integrations are real; the marketplace around it is not (yet).</p>
+            </details>
+
+            <details class="faq-item">
+              <summary>Is InternSphere free?</summary>
+              <p>Yes — students apply and work for free, and companies post and review roles for free. No credit card required.</p>
+            </details>
+
+            <details class="faq-item">
+              <summary>How do AI features work? Do you sell my data?</summary>
+              <p>AI features are powered by Google Gemini. Your CV and submissions are sent to Gemini for analysis in real-time — we don't store them on third-party servers, and we don't sell data. Firebase Auth + Firestore rules keep your data scoped to you (and the company whose role you apply to).</p>
+            </details>
+
+            <details class="faq-item">
+              <summary>What happens after I apply? Can I track the status?</summary>
+              <p>Every application shows up on your dashboard with a live status — Pending, Shortlisted, Approved, or Rejected. Rejected applications can be re-applied. Approved applications unlock your Workroom with the tasks the company has assigned.</p>
+            </details>
+
+            <details class="faq-item">
+              <summary>What is the "final task"?</summary>
+              <p>Each internship has a task the company marks as final. Submitting it (and completing every earlier task) closes the internship out — you see a completion modal and a certificate follows within a week.</p>
+            </details>
+
+            <details class="faq-item">
+              <summary>Can I edit my work with AI help?</summary>
+              <p>Yes. Inside the Workroom, TARS can rewrite your draft — fix grammar, make it formal, improve wording, or draft a starter document based on the task brief. Every AI edit is reversible via the "Undo AI" button.</p>
+            </details>
+
+            <details class="faq-item">
+              <summary>I'm a company — how do I rank 30+ applicants fast?</summary>
+              <p>Open TARS on the company dashboard and pick "Find promising applicants". Choose a role — TARS reads every CV, ranks candidates by fit score with reasoning, and surfaces your top picks in seconds.</p>
+            </details>
+
+            <details class="faq-item">
+              <summary>Do my drafts persist if I close the tab?</summary>
+              <p>Yes. Every 2 seconds the Workroom saves your editor content locally, keyed to your task. Reopening the page drops you right back where you were — same task, same draft, same TARS conversation history.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- cta -->
+      <section
+        id="contact"
+        class="section section-cta"
+        data-aos="fade-up"
+        data-aos-delay="60"
+        data-aos-duration="1000"
+        data-aos-easing="ease"
+      >
+        <div class="container">
+          <div class="cta">
+            <div class="cta-left">
+              <h2>Start your internship journey today</h2>
+              <p class="muted">
+                Discover virtual internships, work on real tasks, and gain industry-ready
+                experience with AI-powered guidance.
+              </p>
+              <div class="hero-cta">
+                <a class="btn btn-primary btn-lg" href="login.html">Get Started</a>
+                <a class="btn btn-ghost btn-lg" href="#features">Learn more</a>
+              </div>
+            </div>
+
+            <div class="cta-right">
+              <div class="cta-card">
+                <b>Includes</b>
+                <ul>
+                  <li>AI resume + skill feedback</li>
+                  <li>Application tracking</li>
+                  <li>Workroom tasks & reviews</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- footer -->
+    <footer class="footer">
+      <div class="container footer-grid">
+        <div>
+          <div class="foot-brand">
+            <img
+              class="brand-logo sm"
+              src="assets/images/Internsphere logo.png"
+              alt="InternSphere logo"
+            />
+            <b>InternSphere</b>
+          </div>
+          <p class="muted">
+            A virtual internship platform designed to connect students and companies seamlessly.
+          </p>
+        </div>
+
+        <div>
+          <h4>Quick Links</h4>
+          <a href="#hero">Home</a>
+          <a href="#features">Features</a>
+          <a href="#how">How it works</a>
+          <a href="mailto:InternSphere7@gmail.com?subject=InternSphere%20enquiry">Contact</a>
+        </div>
+
+        <div>
+          <h4>Company</h4>
+          <a href="privacy.html">Privacy Policy</a>
+          <a href="terms.html">Terms</a>
+          <a href="mailto:InternSphere7@gmail.com?subject=InternSphere%20support">Support</a>
+        </div>
+
+        <div>
+          <h4>Connect</h4>
+          <a href="#">LinkedIn</a>
+          <a href="#">Twitter</a>
+          <a href="#">GitHub</a>
+        </div>
+      </div>
+
+      <div class="container footer-bottom">
+        <span>© 2026 InternSphere. All rights reserved.</span>
+        <a href="#hero">Back to top ↑</a>
+      </div>
+    </footer>
+
+    <!-- scripts -->
+    <script defer src="https://unpkg.com/lenis@1.1.20/dist/lenis.min.js"></script>
+    <script defer src="js/scroll-init.js"></script>
+
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+    <script>
+      AOS.init({
+        offset: 120,
+        duration: 700,
+        easing: "ease",
+        once: true,
+        mirror: false,
+        anchorPlacement: "top-bottom",
+      });
+    </script>
+
+    <script type="module" src="js/main.js"></script>
+    <script src="js/theme.js"></script>
+    <script src="js/ui-dynamic.js"></script>
+    <script src="js/footer.js"></script>
+  </body>
+</html>

@@ -1122,3 +1122,17 @@ const workroomBtn = document.getElementById('enterWorkroom');
 workroomBtn.addEventListener('click', () => {
   window.location.href = '/virtualworkroom.html';
 });
+
+
+// Find Internships button in TARS menu
+document.getElementById("openAiSearchFromProfile")?.addEventListener("click", () => {
+  // close TARS console first
+  document.getElementById("tarsConsole")?.classList.remove("show");
+  // redirect to internship listing page
+  window.location.href = "internshipdetails.html";
+});
+
+// Contact Us button in TARS menu
+document.querySelectorAll(".tars-menu-btn")[3]?.addEventListener("click", () => {
+  window.location.href = "mailto:InternSphere7@gmail.com";
+});

@@ -2,7 +2,7 @@
 import { requireAuth } from "./guard.js";
 requireAuth();
 
-import { auth, db, storage } from "../firebase/firebase.js";
+import { auth, db } from "../firebase/firebase.js";
 import {
   doc,
   getDoc,
@@ -17,11 +17,7 @@ import {
   arrayUnion,
   arrayRemove,
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import {
-  ref as storageRef,
-  uploadBytes,
-  getDownloadURL,
-} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-storage.js";
+
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 
 // helpers
@@ -476,15 +472,11 @@ if (applyForm) {
       }
       const internship = intSnap.data();
 
-      const sanitized = (file.name || "cv.pdf")
-        .replace(/[^a-z0-9._-]+/gi, "_")
-        .slice(0, 80);
-      const cvPath = `students/${user.uid}/cvs/${Date.now()}-${sanitized}`;
-      const cvRef = storageRef(storage, cvPath);
-      if (submitBtn) submitBtn.textContent = "Uploading CV…";
-      await uploadBytes(cvRef, file, { contentType: "application/pdf" });
-      const cvUrl = await getDownloadURL(cvRef);
+      if (submitBtn) submitBtn.textContent = "Reading CV…";
+      const cvDataUrl = await readAsDataURL(file);
       if (submitBtn) submitBtn.textContent = "Submitting…";
+      const cvUrl = cvDataUrl;
+      const cvPath = `base64:${user.uid}/${Date.now()}`;
 
       const applicantNote = (document.getElementById("applicantNote")?.value || "").trim();
 

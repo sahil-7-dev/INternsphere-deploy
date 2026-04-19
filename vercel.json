@@ -1,5 +1,6 @@
 {
   "rewrites": [
-    { "source": "/api/gemini", "destination": "/api/gemini.js" }
+    { "source": "/api/gemini", "destination": "/api/gemini.js" },
+    { "source": "/", "destination": "/Index.html" }
   ]
 }

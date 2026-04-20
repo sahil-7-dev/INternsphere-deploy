@@ -52,13 +52,18 @@ export async function askGemini(opts = {}) {
     body: JSON.stringify({ model, body }),
   });
 
-  if (!res.ok) {
+ if (!res.ok) {
     let detail = "";
     try {
-      const j = await res.json();
-      detail = j?.error?.message || JSON.stringify(j);
+      const text = await res.text();
+      try {
+        const j = JSON.parse(text);
+        detail = j?.error?.message || JSON.stringify(j);
+      } catch {
+        detail = text;
+      }
     } catch {
-      detail = await res.text();
+      detail = `HTTP ${res.status}`;
     }
     const err = new Error(`Gemini ${res.status}: ${detail}`);
     err.status = res.status;

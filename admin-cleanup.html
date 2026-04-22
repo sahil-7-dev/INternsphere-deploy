@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>Admin · Cleanup orphan applications</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+      background: #0f1013;
+      color: rgba(255,255,255,0.92);
+      padding: 40px 20px;
+      min-height: 100vh;
+    }
+    .wrap { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 1.2rem; margin: 0 0 6px; }
+    .sub { color: rgba(255,255,255,0.55); font-size: 0.88rem; margin-bottom: 22px; }
+    .card {
+      background: #18191d;
+      border: 1px solid #27282d;
+      border-radius: 12px;
+      padding: 22px;
+      margin-bottom: 18px;
+    }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    button {
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: 1px solid #2f3138;
+      background: #1f2127;
+      color: rgba(255,255,255,0.9);
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover:not(:disabled) { border-color: #4f5159; }
+    button.primary { background: #2e5dfe; border-color: #2e5dfe; color: white; }
+    button.danger  { background: #c02a2a; border-color: #c02a2a; color: white; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .status {
+      font-size: 0.88rem;
+      color: rgba(255,255,255,0.62);
+      margin-left: 6px;
+    }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-all;
+      font: 0.82rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: rgba(255,255,255,0.82);
+      background: #0f1013;
+      border: 1px solid #27282d;
+      border-radius: 8px;
+      padding: 14px;
+      max-height: 420px;
+      overflow: auto;
+      margin: 16px 0 0;
+    }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-size: 0.72rem;
+      background: #2f3138;
+      color: rgba(255,255,255,0.78);
+    }
+    .pill.good { background: #0e3e1e; color: #86e5a3; }
+    .pill.bad  { background: #3e1717; color: #f7a0a0; }
+    label.filter {
+      font-size: 0.88rem;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin: 10px 0 0;
+    }
+    input[type="text"] {
+      background: #0f1013;
+      border: 1px solid #2f3138;
+      color: inherit;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font: inherit;
+      min-width: 280px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Cleanup: orphan applications</h1>
+    <p class="sub">
+      Removes documents in <code>applications</code> where both <code>name</code> and <code>email</code> are empty —
+      artifacts of the earlier submit-race bug. Admin-only. Dry-run first, delete requires a second confirm.
+    </p>
+
+    <div class="card">
+      <div class="row">
+        <span id="authState" class="pill">Checking auth…</span>
+      </div>
+      <label class="filter">
+        Scope by companyId (optional):
+        <input type="text" id="companyId" placeholder="leave empty = all companies" />
+      </label>
+      <div class="row" style="margin-top:18px">
+        <button id="scanBtn" class="primary" disabled>Scan orphans</button>
+        <button id="deleteBtn" class="danger" disabled>Delete scanned</button>
+        <span id="status" class="status"></span>
+      </div>
+      <pre id="output">(no scan yet)</pre>
+    </div>
+  </div>
+
+  <script type="module">
+    import { auth, db } from "./firebase/firebase.js";
+    import {
+      onAuthStateChanged,
+    } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
+    import {
+      collection,
+      query,
+      where,
+      getDocs,
+      getDoc,
+      doc,
+      deleteDoc,
+    } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+
+    const authPill    = document.getElementById("authState");
+    const scanBtn     = document.getElementById("scanBtn");
+    const deleteBtn   = document.getElementById("deleteBtn");
+    const statusEl    = document.getElementById("status");
+    const outputEl    = document.getElementById("output");
+    const companyIdEl = document.getElementById("companyId");
+
+    let scanned = [];
+
+    function setStatus(msg) { statusEl.textContent = msg; }
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        authPill.className = "pill bad";
+        authPill.textContent = "Not signed in — open /login.html first as an admin.";
+        return;
+      }
+      try {
+        const snap = await getDoc(doc(db, "users", user.uid));
+        const role = snap.exists() ? snap.data().role : null;
+        if (role !== "admin") {
+          authPill.className = "pill bad";
+          authPill.textContent = `Signed in as ${user.email} (role=${role || "unknown"}). Admin only.`;
+          return;
+        }
+        authPill.className = "pill good";
+        authPill.textContent = `Admin: ${user.email}`;
+        scanBtn.disabled = false;
+      } catch (err) {
+        authPill.className = "pill bad";
+        authPill.textContent = "Role lookup failed — check Firestore rules / network.";
+        console.error(err);
+      }
+    });
+
+    scanBtn.addEventListener("click", async () => {
+      scanBtn.disabled = true;
+      deleteBtn.disabled = true;
+      setStatus("scanning…");
+      outputEl.textContent = "";
+      scanned = [];
+
+      try {
+        const scopedCompany = companyIdEl.value.trim();
+        let q;
+        if (scopedCompany) {
+          q = query(collection(db, "applications"), where("companyId", "==", scopedCompany));
+        } else {
+          q = query(collection(db, "applications"));
+        }
+        const snap = await getDocs(q);
+        snap.forEach((d) => {
+          const data = d.data();
+          const nameEmpty  = !String(data.name  || "").trim();
+          const emailEmpty = !String(data.email || "").trim();
+          if (nameEmpty && emailEmpty) {
+            scanned.push({
+              id: d.id,
+              companyId: data.companyId || "",
+              studentId: data.studentId || "",
+              role: data.role || "",
+              status: data.status || "",
+              appliedAt: data.appliedAt || "",
+              phone: data.phone || "",
+            });
+          }
+        });
+
+        if (!scanned.length) {
+          outputEl.textContent = "(no orphan applications found)";
+          setStatus("0 found");
+        } else {
+          outputEl.textContent = scanned
+            .map((r, i) =>
+              `${String(i + 1).padStart(3, " ")}. ${r.id}\n` +
+              `     company=${r.companyId}  student=${r.studentId}\n` +
+              `     role="${r.role}"  status=${r.status}  appliedAt=${r.appliedAt}  phone="${r.phone}"`
+            )
+            .join("\n\n");
+          setStatus(`${scanned.length} found — review above, then click "Delete scanned".`);
+          deleteBtn.disabled = false;
+        }
+      } catch (err) {
+        console.error(err);
+        outputEl.textContent = "Scan failed: " + (err?.message || err);
+        setStatus("error");
+      } finally {
+        scanBtn.disabled = false;
+      }
+    });
+
+    deleteBtn.addEventListener("click", async () => {
+      if (!scanned.length) return;
+      const first = scanned.slice(0, 3).map(r => r.id).join(", ");
+      const msg =
+        `About to permanently DELETE ${scanned.length} application document(s).\n\n` +
+        `Preview ids: ${first}${scanned.length > 3 ? " …" : ""}\n\n` +
+        `This cannot be undone. Type DELETE to confirm.`;
+      const reply = prompt(msg, "");
+      if (reply !== "DELETE") {
+        setStatus("cancelled");
+        return;
+      }
+
+      scanBtn.disabled = true;
+      deleteBtn.disabled = true;
+      setStatus(`deleting 0 / ${scanned.length}…`);
+
+      let ok = 0;
+      let fail = 0;
+      for (let i = 0; i < scanned.length; i++) {
+        try {
+          await deleteDoc(doc(db, "applications", scanned[i].id));
+          ok += 1;
+        } catch (err) {
+          console.error("delete failed for", scanned[i].id, err);
+          fail += 1;
+        }
+        setStatus(`deleting ${i + 1} / ${scanned.length}…`);
+      }
+
+      setStatus(`done — deleted ${ok}, failed ${fail}`);
+      outputEl.textContent = `Deleted ${ok} of ${scanned.length}.` + (fail ? `\nFailed: ${fail}. See console for details.` : "");
+      scanned = [];
+      scanBtn.disabled = false;
+    });
+  </script>
+</body>
+</html>

@@ -129,15 +129,36 @@
               work experience.
             </p>
 
-            <div class="hero-cta">
-              <a class="btn btn-primary btn-lg" href="login.html">Get started</a>
-              <a class="btn btn-ghost btn-lg" href="#features">See features</a>
+            <div class="hero-try">
+              <p class="hero-try__kicker">Try the full platform — no signup, no setup.</p>
+              <div class="hero-try__grid">
+                <button type="button" class="hero-try__card hero-try__card--student hero-try-go" data-guest-role="student">
+                  <span class="hero-try__badge">Preview</span>
+                  <span class="hero-try__ico" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                    </svg>
+                  </span>
+                  <span class="hero-try__title">Try as Student</span>
+                  <span class="hero-try__sub">Browse internships and the dashboard.</span>
+                </button>
+                <button type="button" class="hero-try__card hero-try__card--company hero-try-go" data-guest-role="company">
+                  <span class="hero-try__badge">Preview</span>
+                  <span class="hero-try__ico" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 13h8M8 17h5"/>
+                    </svg>
+                  </span>
+                  <span class="hero-try__title">Try as Company</span>
+                  <span class="hero-try__sub">Peek at the company dashboard.</span>
+                </button>
+              </div>
             </div>
 
             <div class="hero-badges">
               <span class="mini-badge">AI Resume Feedback</span>
               <span class="mini-badge">Workroom Tasks</span>
-              <span class="mini-badge">Progress Timeline</span>
+              <span class="mini-badge">Signed Certificates</span>
             </div>
           </div>
 
@@ -673,5 +694,32 @@
     <script src="js/theme.js"></script>
     <script src="js/ui-dynamic.js"></script>
     <script src="js/footer.js"></script>
+
+    <!-- Guest preview cards — clicking sets the session flag, signs out
+         any logged-in real user (so the destination page doesn't fall back
+         to their identity), and drops the visitor into the matching
+         dashboard. guest-mode.js on that page handles anon sign-in + UI. -->
+    <script type="module">
+      document.addEventListener("click", async function (e) {
+        var btn = e.target.closest && e.target.closest(".hero-try-go");
+        if (!btn) return;
+        e.preventDefault();
+        var role = btn.getAttribute("data-guest-role");
+        if (role !== "student" && role !== "company") return;
+        try { sessionStorage.setItem("guestRole", role); } catch (_) {}
+        try {
+          const { auth } = await import("./firebase/firebase.js");
+          if (auth.currentUser && !auth.currentUser.isAnonymous) {
+            const { signOut } = await import(
+              "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js"
+            );
+            await signOut(auth);
+          }
+        } catch (err) { console.warn("guest signout:", err); }
+        window.location.href = role === "company"
+          ? "dashboard-company.html"
+          : "dashboard.html";
+      });
+    </script>
   </body>
 </html>

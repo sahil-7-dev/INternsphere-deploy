@@ -25,8 +25,10 @@ service cloud.firestore {
     }
 
     // ── INTERNSHIPS ─────────────────────────────
+    // Publicly readable — job listings are meant to be discovered, and this
+    // also unblocks guest / preview mode before anonymous auth settles.
     match /internships/{docId} {
-      allow read: if request.auth != null;
+      allow read: if true;
       allow create: if request.auth != null
         && request.resource.data.companyId == request.auth.uid;
       allow update, delete: if isAdmin() || (request.auth != null
@@ -34,8 +36,10 @@ service cloud.firestore {
     }
 
     // ── COMPANIES ─────────────────────────────
+    // Public read so internship detail pages can show the company name/logo
+    // without requiring authentication.
     match /companies/{uid} {
-      allow read: if request.auth != null;
+      allow read: if true;
       allow write: if isAdmin() || (request.auth != null && request.auth.uid == uid);
     }
 
@@ -112,3 +116,4 @@ service cloud.firestore {
 
   }
 }
+

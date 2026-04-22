@@ -98,6 +98,10 @@
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3h10v10H3z"/><path d="M5 6l2 2 4-4"/></svg>
         Tasks
       </a>
+      <a class="nav-item" data-section="certificates" href="#">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="7" r="4.5"/><path d="M5.5 10.5l-1.5 4 4-1.5 4 1.5-1.5-4"/></svg>
+        Certificates
+      </a>
       <a class="nav-item" id="openCompanySettings" href="#">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v1M8 13.5v1M1.5 8h1M13.5 8h1M3.2 3.2l.7.7M12.1 12.1l.7.7M12.8 3.2l-.7.7M3.9 12.1l-.7.7"/></svg>
         Settings
@@ -156,12 +160,12 @@
       </header>
 
       <!-- notification dropdown -->
-      <div id="coNotifDropdown" class="notif-dropdown hidden">
+      <div id="coNotifDropdown" class="notif-dropdown hidden" data-lenis-prevent>
         <div class="notif-header">
           <span>Notifications</span>
           <button id="coMarkAllRead">Mark all read</button>
         </div>
-        <div id="coNotifList">
+        <div id="coNotifList" data-lenis-prevent>
           <p class="notif-empty">No notifications yet.</p>
         </div>
       </div>
@@ -296,6 +300,11 @@
       </header>
       <div id="apps" class="app-grid"></div>
       <p id="empty-state" class="empty-msg" style="display:none">No applications match this filter.</p>
+      <nav id="apps-pager" class="apps-pager" aria-label="Applications pagination" style="display:none">
+        <button type="button" class="pager-btn" id="pager-prev" aria-label="Previous page">← Prev</button>
+        <span class="pager-info" id="pager-info">Page 1 of 1</span>
+        <button type="button" class="pager-btn" id="pager-next" aria-label="Next page">Next →</button>
+      </nav>
     </section>
 
     <!-- internships -->
@@ -310,8 +319,25 @@
           Post Role
         </button>
       </header>
+
+      <div id="verify-banner" class="verify-banner" style="display:none" role="status">
+        <div class="verify-banner__icon" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 10.8v.4"/></svg>
+        </div>
+        <div class="verify-banner__body">
+          <div class="verify-banner__title" id="verify-banner-title">Verification required</div>
+          <div class="verify-banner__msg"   id="verify-banner-msg">Your company account is awaiting admin approval. You'll be able to post internships once verified.</div>
+        </div>
+        <button type="button" class="verify-banner__action" id="verify-banner-action">Request verification</button>
+      </div>
+
       <div id="internships-grid" class="int-grid"></div>
       <p id="internships-empty" class="empty-msg" style="display:none">No roles posted yet. Create your first one.</p>
+      <nav id="internships-pager" class="apps-pager" aria-label="Internships pagination" style="display:none">
+        <button type="button" class="pager-btn" id="int-pager-prev" aria-label="Previous page">← Prev</button>
+        <span class="pager-info" id="int-pager-info">Page 1 of 1</span>
+        <button type="button" class="pager-btn" id="int-pager-next" aria-label="Next page">Next →</button>
+      </nav>
 
       <div id="internship-modal" class="modal-backdrop hidden">
         <div class="modal-card">
@@ -429,6 +455,11 @@
       <div id="tasks-grid" class="app-grid"></div>
       <p id="tasks-empty" class="empty-msg" style="display:none">No tasks for this internship yet. Click "Add Task" to create one.</p>
       <p id="tasks-hint" class="empty-msg">Select an internship above to manage its tasks.</p>
+      <nav id="tasks-pager" class="apps-pager" aria-label="Tasks pagination" style="display:none">
+        <button type="button" class="pager-btn" id="task-pager-prev" aria-label="Previous page">← Prev</button>
+        <span class="pager-info" id="task-pager-info">Page 1 of 1</span>
+        <button type="button" class="pager-btn" id="task-pager-next" aria-label="Next page">Next →</button>
+      </nav>
 
       <!-- submissions modal -->
       <div id="submissions-modal" class="modal-backdrop hidden">
@@ -571,6 +602,19 @@
       </div>
     </section>
 
+    <!-- certificates -->
+    <section id="section-certificates" class="page">
+      <header class="page-header">
+        <div>
+          <h1 class="page-title">Certificates</h1>
+          <p class="page-sub">Issue offer letters when you approve a candidate. Approve completion certificates once their final task is done.</p>
+        </div>
+      </header>
+
+      <div id="certs-list" class="certs-list"></div>
+      <p id="certs-empty" class="empty-msg" style="display:none">No approved applicants yet — approve an applicant first to issue their offer letter.</p>
+    </section>
+
   </main>
 </div>
 
@@ -669,6 +713,8 @@
 <!-- scripts -->
 <script type="module" src="js/report.js"></script>
 <script type="module" src="js/company-onboarding.js"></script>
+<script type="module" src="js/guest-mode.js"></script>
+<script src="js/sounds.js"></script>
 <script type="module" src="js/dashboard-company.js"></script>
 <script type="module" src="js/company-tasks.js"></script>
 <script type="module" src="js/tars-company.js"></script>

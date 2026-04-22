@@ -45,6 +45,20 @@
 
   <main class="page">
     <section class="panel-wrap">
+
+      <aside class="guest-side guest-side--left" aria-label="Try as student">
+        <button type="button" class="guest-card guest-card--student guest-try" data-guest-role="student">
+          <span class="guest-card__badge">Preview</span>
+          <span class="guest-card__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>
+            </svg>
+          </span>
+          <span class="guest-card__title">Try as Student</span>
+          <span class="guest-card__sub">Browse internships and the dashboard without signing up.</span>
+        </button>
+      </aside>
+
       <section class="panel">
         
         <div id="authMsg" class="auth-msg" role="status" aria-live="polite" hidden>
@@ -143,6 +157,20 @@
         </form>
 
       </section>
+
+      <aside class="guest-side guest-side--right" aria-label="Try as company">
+        <button type="button" class="guest-card guest-card--company guest-try" data-guest-role="company">
+          <span class="guest-card__badge">Preview</span>
+          <span class="guest-card__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 13h8M8 17h5"/>
+            </svg>
+          </span>
+          <span class="guest-card__title">Try as Company</span>
+          <span class="guest-card__sub">Preview the company dashboard — write actions are disabled.</span>
+        </button>
+      </aside>
+
     </section>
 
   </main>

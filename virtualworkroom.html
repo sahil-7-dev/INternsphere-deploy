@@ -161,10 +161,13 @@
         </div>
         <div class="completion-emoji">🎉</div>
         <h2>Congratulations!</h2>
-        <p>You have successfully submitted all the tasks.</p>
-        <p>The company will review your task submission and you'll receive your internship completion certificate within <strong>1 week</strong>.</p>
-        <p style="font-size:0.9rem;margin-top:10px">In the meantime, your preview certificate is ready to download now:</p>
-        <p style="font-size:0.85rem;opacity:0.75;margin-top:12px">If you don't receive the completion certificate or an update on your submission, please <a href="mailto:InternSphere7@gmail.com?subject=Internship%20completion%20query" style="color:#a855f7;text-decoration:underline">contact us</a>.</p>
+        <p>You have successfully submitted all your tasks.</p>
+        <p id="completionHint" style="font-size:0.95rem;margin-top:10px">
+          You've finished every task. Your company will approve your completion shortly — the certificate will unlock here the moment they do.
+        </p>
+        <p style="font-size:0.85rem;opacity:0.75;margin-top:12px">
+          Not hearing back? <a href="mailto:InternSphere7@gmail.com?subject=Internship%20completion%20query" style="color:#a855f7;text-decoration:underline">Contact us</a>.
+        </p>
         <div class="completion-ft">
           <button class="btn btn-primary" id="downloadCertBtn" type="button">⬇ Download Certificate</button>
           <button class="btn btn-ghost" id="completionOk">Back to Dashboard</button>
@@ -185,6 +188,9 @@
       </div>
     </div>
 
+    <script type="module" src="js/guest-mode.js"></script>
+    <script src="js/offer-letter.js"></script>
+    <script src="js/certificate.js"></script>
     <script type="module" src="js/virtualworkroom.js"></script>
     <script type="module" src="js/tars-workroom.js"></script>
     <script src="js/theme.js"></script>

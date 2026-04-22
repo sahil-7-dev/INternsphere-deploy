@@ -1,879 +1,1022 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>InternSphere — Dashboard</title>
 
-    <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
-    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
-    <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin />
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>InternSphere — Dashboard</title>
 
-    <script>(function(){try{var t=localStorage.getItem("theme")||localStorage.getItem("internsphere_theme")||"dark",h=document.documentElement;h.classList.remove("dark","light","theme-dark","theme-light");if(t==="light"){h.classList.add("theme-light","light");h.style.colorScheme="light";h.style.backgroundColor="#f6f8fb"}else{h.classList.add("theme-dark","dark");h.style.colorScheme="dark";h.style.backgroundColor="#111113"}var s=document.createElement("style");s.textContent="html.theme-light body,html.light body{background:#f6f8fb;color:#0f172a}html.theme-dark body,html.dark body{background:#111113;color:rgba(255,255,255,0.95)}";(document.head||document.documentElement).appendChild(s)}catch(e){}})();</script>
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+  <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin />
 
-    <link rel="stylesheet" href="css/tokens.css" />
-    <link rel="stylesheet" href="css/dashboard.css" />
-    <link rel="stylesheet" href="css/notifications.css">
+  <script>(function () { try { var t = localStorage.getItem("theme") || localStorage.getItem("internsphere_theme") || "dark", h = document.documentElement; h.classList.remove("dark", "light", "theme-dark", "theme-light"); if (t === "light") { h.classList.add("theme-light", "light"); h.style.colorScheme = "light"; h.style.backgroundColor = "#f6f8fb" } else { h.classList.add("theme-dark", "dark"); h.style.colorScheme = "dark"; h.style.backgroundColor = "#111113" } var s = document.createElement("style"); s.textContent = "html.theme-light body,html.light body{background:#f6f8fb;color:#0f172a}html.theme-dark body,html.dark body{background:#111113;color:rgba(255,255,255,0.95)}"; (document.head || document.documentElement).appendChild(s) } catch (e) { } })();</script>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
-      rel="stylesheet"
-    />
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/dashboard.css" />
+  <link rel="stylesheet" href="css/notifications.css">
 
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/lenis@1.1.20/dist/lenis.css"
-    />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+    rel="stylesheet" />
 
-    <link rel="stylesheet" href="css/modern.css" />
-    <link rel="stylesheet" href="css/ai-theme.css" />
-    <script defer src="https://unpkg.com/lenis@1.1.20/dist/lenis.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/lenis@1.1.20/dist/lenis.css" />
 
-  
+  <link rel="stylesheet" href="css/modern.css" />
+  <link rel="stylesheet" href="css/ai-theme.css" />
+  <script defer src="https://unpkg.com/lenis@1.1.20/dist/lenis.min.js"></script>
 
-    <script defer src="js/scroll-init.js"></script>
-  </head>
 
-  <body data-footer="minimal">
-    <!-- topbar -->
-    <header class="topbar">
-      <div class="container topbar-inner">
-<span class="brand" aria-label="hidden">
-  <img
-    src="assets/images/Internsphere logo.png"
-    alt="InternSphere logo"
-    width="44px"
-    height="auto"
-    class="brand-logo"
-  />
-  <span class="brand-name">InternSphere</span>
-</span>
 
-        <div class="topbar-mid">
-          <div class="search">
-            <span class="search-ico" aria-hidden="true">⌕</span>
-            <input
-              id="globalSearch"
-              type="text"
-              placeholder="Search tasks, internships, companies…"
-              aria-label="Search"
-            />
-            
+  <script defer src="js/scroll-init.js"></script>
+</head>
+
+<body data-footer="minimal">
+  <!-- topbar -->
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <span class="brand" aria-label="hidden">
+        <img src="assets/images/Internsphere logo.png" alt="InternSphere logo" width="44px" height="auto"
+          class="brand-logo" />
+        <span class="brand-name">InternSphere</span>
+      </span>
+
+      <div class="topbar-mid">
+        <div class="search">
+          <span class="search-ico" aria-hidden="true">⌕</span>
+          <input id="globalSearch" type="text" placeholder="Search tasks, internships, companies…"
+            aria-label="Search" />
+
+        </div>
+      </div>
+
+      <button class="icon-btn" type="button" aria-label="Notifications" id="notifBtn">
+        <img loading="lazy" decoding="async" class="icon-bell" src="assets/images/icon-bell.png" alt="Notifications"
+          width="22" height="22">
+        <span class="badge" id="notifBadge" style="display:none">0</span>
+      </button>
+
+      <!-- notification dropdown -->
+      <div id="notifDropdown" class="notif-dropdown hidden" data-lenis-prevent>
+        <div class="notif-header">
+          <span>Notifications</span>
+          <button id="markAllRead">Mark all read</button>
+        </div>
+        <div id="notifList" data-lenis-prevent>
+          <p class="notif-empty">No notifications yet.</p>
+        </div>
+      </div>
+
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle theme" aria-pressed="true"
+        title="Toggle theme">
+        <span class="toggle-ico" aria-hidden="true">🌙</span>
+        <span class="toggle-label">Dark</span>
+      </button>
+
+      <button class="profile" type="button" aria-label="Profile menu">
+        <span class="avatar">S</span>
+        <span class="profile-meta">
+          <b id="userName">User</b>
+          <small id="userMeta">Role • 0% ATS</small>
+        </span>
+        <span class="chev" aria-hidden="true">▾</span>
+      </button>
+
+      <div id="tarsConsole" class="tars-console">
+        <div class="tars-header">
+          <span class="tars-name"><img loading="lazy" decoding="async" src="assets/images/icons8-ai-64.png" alt="TARS"
+              width="25" height="25" class="tars-logo-img"><b>TARS</b></span>
+
+          <div class="tars-controls">
+            <span id="closeTars">&times;</span>
           </div>
         </div>
 
-       <button class="icon-btn" type="button" aria-label="Notifications" id="notifBtn">
-  <img loading="lazy" decoding="async" class="icon-bell" src="assets/images/icon-bell.png" alt="Notifications" width="22" height="22">
-  <span class="badge" id="notifBadge" style="display:none">0</span>
-</button>
+        <div class="tars-body">
 
-<!-- notification dropdown -->
-<div id="notifDropdown" class="notif-dropdown hidden">
-  <div class="notif-header">
-    <span>Notifications</span>
-    <button id="markAllRead">Mark all read</button>
-  </div>
-  <div id="notifList">
-    <p class="notif-empty">No notifications yet.</p>
-  </div>
-</div>
+          <p class="tars-line" id="tarsMessage">Loading your workspace…</p>
 
-          <button
-            class="theme-toggle"
-            id="themeToggle"
-            type="button"
-            aria-label="Toggle theme"
-            aria-pressed="true"
-            title="Toggle theme"
-          >
-            <span class="toggle-ico" aria-hidden="true">🌙</span>
-            <span class="toggle-label">Dark</span>
-          </button>
-
-  <button class="profile" type="button" aria-label="Profile menu">
-  <span class="avatar">S</span>
-  <span class="profile-meta">
-   <b id="userName">User</b>
-<small id="userMeta">Role • 0% ATS</small>
-  </span>
-  <span class="chev" aria-hidden="true">▾</span>
-</button>
-
-<div id="tarsConsole" class="tars-console">
-  <div class="tars-header">
-    <span class="tars-name"><img loading="lazy" decoding="async" src="assets/images/icons8-ai-64.png" alt="TARS" width="25" height="25" class="tars-logo-img"><b>TARS</b></span>
-
-    <div class="tars-controls">
-      <span id="closeTars">&times;</span>
-    </div>
-  </div>
-
-  <div class="tars-body">
-
-    <p class="tars-line" id="tarsMessage">Welcome back, Sahil 👋</p>
-
-    <div class="tars-stats">
-      <span id="tarsTasksPending">No task pending</span>
-      <span>Profile Score: <b id="tarsAtsScore">0%</b></span>
-    </div>
-
-    <!-- quick actions -->
-<div class="tars-menu">
-  <button class="tars-menu-btn"><img loading="lazy" decoding="async" class="menu-img" src="assets/images/icon-user.png" alt="" aria-hidden="true"> View Profile</button>
-  <button class="tars-menu-btn" id="enterWorkroom"><img loading="lazy" decoding="async" class="menu-img" src="assets/images/icon-workroom.png" alt="" aria-hidden="true"> Enter Virtual Workroom</button>
-  <button class="tars-menu-btn" id="openAiSearchFromProfile"><img loading="lazy" decoding="async" class="menu-img" src="assets/images/icon-find-internship.png" alt="" aria-hidden="true"> Find Internships</button>
-  <button class="tars-menu-btn"><img loading="lazy" decoding="async" class="menu-img" src="assets/images/icon-contact.png" alt="" aria-hidden="true"> Contact Us</button>
-  <button class="tars-menu-btn logout"><img loading="lazy" decoding="async" class="menu-img" src="assets/images/icon-logout.png" alt="" aria-hidden="true"> Logout</button>
-</div>
-
-  </div>
-</div>
-
-          <button
-            class="hamburger"
-            id="hamburger"
-            type="button"
-            aria-label="Open menu"
-          >
-            <span></span><span></span><span></span>
-          </button>
-        </div>
-      </div>
-    </header>
-
-    <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
-
-    <div class="layout container">
-      <!-- sidebar -->
-      <aside class="sidebar mobile-keep" id="sidebar">
-        <nav class="side-nav" aria-label="Dashboard navigation">
-          <a class="side-link active" href="#">
-            <span class="side-ico"><img loading="lazy" decoding="async" class="side-ico-img" src="assets/images/icon-overview.png" alt="" aria-hidden="true"></span>
-            Overview
-          </a>
-          <a class="side-link" href="#" id="aiAnalyzerLink">
-            <span class="side-ico"><img loading="lazy" decoding="async" class="ai-glow" src="assets/images/icons8-ai-64.png" alt="AI Analyzer" width="25" height="25"></span>
-            AI Analyzer
-          </a>
-          <a class="side-link" href="#" id="openTasks">
-            <span class="side-ico"><img loading="lazy" decoding="async" class="side-ico-img" src="assets/images/icon-tasks.png" alt="" aria-hidden="true"></span>
-            Tasks
-          </a>
-          <a class="side-link" href="#" id="openApplications">
-            <span class="side-ico"><img loading="lazy" decoding="async" class="side-ico-img" src="assets/images/icon-applications.png" alt="" aria-hidden="true"></span>
-            Applications
-          </a>
-          <a class="side-link" href="#" id="openFeedback">
-            <span class="side-ico"><img loading="lazy" decoding="async" class="side-ico-img" src="assets/images/icon-feedback.png" alt="" aria-hidden="true"></span>
-            Feedback
-          </a>
-          <a class="side-link" href="#" id="openSettingsSidebar">
-            <span class="side-ico"><img loading="lazy" decoding="async" class="side-ico-img" src="assets/images/icon-settings.png" alt="" aria-hidden="true"></span>
-            Settings
-          </a>
-        </nav>
-      </aside>
-
-      <!-- main -->
-      <main class="main">
-        <div class="container main-inner">
-          <!-- welcome banner -->
-          <section class="dash-hero" aria-label="Welcome banner">
-            <div class="dash-hero-text">
-              <div class="dash-hero-kicker" id="dashGreetingKicker">—</div>
-              <h1 class="dash-hero-title">
-                <span id="dashGreetingTo">Welcome back,</span>
-                <span id="dashGreetingName" class="dash-hero-name">—</span>
-              </h1>
-              <p class="dash-hero-sub" id="dashGreetingSub">Loading your snapshot…</p>
-              <div class="dash-focus" id="dashFocus" style="display:none">
-                <span class="dash-focus-ico" aria-hidden="true">›</span>
-                <span class="dash-focus-text" id="dashFocusText"></span>
-              </div>
-            </div>
-            <div class="dash-hero-actions">
-              <button class="btn btn-ghost" type="button" id="tarsQuickBtn">✦ Ask TARS</button>
-              <a class="btn btn-primary" href="internshipdetails.html">Browse internships</a>
-            </div>
-          </section>
-
-          <!-- upcoming interview -->
-          <section class="upcoming-interviews" id="upcomingInterviews" style="display:none" aria-label="Upcoming interviews"></section>
+          <div class="tars-stats">
+            <span id="tarsTasksPending">No task pending</span>
+            <span>Profile Score: <b id="tarsAtsScore">0%</b></span>
+          </div>
 
           <!-- quick actions -->
-          <section class="quick-actions quick-actions-3" aria-label="Quick actions">
-            <a class="qa-tile" href="internshipdetails.html">
-              <span class="qa-tile-ico" aria-hidden="true"><img loading="lazy" decoding="async" src="assets/images/icon-find-internship.png" alt=""></span>
-              <div class="qa-tile-text">
-                <strong>Browse internships</strong>
-                <span>Find roles matching your skills</span>
+          <div class="tars-menu">
+            <button class="tars-menu-btn"><img loading="lazy" decoding="async" class="menu-img"
+                src="assets/images/icon-user.png" alt="" aria-hidden="true"> View Profile</button>
+            <button class="tars-menu-btn" id="enterWorkroom"><img loading="lazy" decoding="async" class="menu-img"
+                src="assets/images/icon-workroom.png" alt="" aria-hidden="true"> Enter Virtual Workroom</button>
+            <button class="tars-menu-btn" id="openAiSearchFromProfile"><img loading="lazy" decoding="async"
+                class="menu-img" src="assets/images/icon-find-internship.png" alt="" aria-hidden="true"> Find
+              Internships</button>
+            <button class="tars-menu-btn"><img loading="lazy" decoding="async" class="menu-img"
+                src="assets/images/icon-contact.png" alt="" aria-hidden="true"> Contact Us</button>
+            <button class="tars-menu-btn logout"><img loading="lazy" decoding="async" class="menu-img"
+                src="assets/images/icon-logout.png" alt="" aria-hidden="true"> Logout</button>
+          </div>
+
+        </div>
+      </div>
+
+      <button class="hamburger" id="hamburger" type="button" aria-label="Open menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+    </div>
+  </header>
+
+  <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+
+  <div class="layout container">
+    <!-- sidebar -->
+    <aside class="sidebar mobile-keep" id="sidebar">
+      <nav class="side-nav" aria-label="Dashboard navigation">
+        <a class="side-link active" href="#">
+          <span class="side-ico"><img loading="lazy" decoding="async" class="side-ico-img"
+              src="assets/images/icon-overview.png" alt="" aria-hidden="true"></span>
+          Overview
+        </a>
+        <a class="side-link" href="#" id="aiAnalyzerLink">
+          <span class="side-ico"><img loading="lazy" decoding="async" class="ai-glow"
+              src="assets/images/icons8-ai-64.png" alt="AI Analyzer" width="25" height="25"></span>
+          AI Analyzer
+        </a>
+        <a class="side-link" href="#" id="openTasks">
+          <span class="side-ico"><img loading="lazy" decoding="async" class="side-ico-img"
+              src="assets/images/icon-tasks.png" alt="" aria-hidden="true"></span>
+          Tasks
+        </a>
+        <a class="side-link" href="#" id="openApplications">
+          <span class="side-ico"><img loading="lazy" decoding="async" class="side-ico-img"
+              src="assets/images/icon-applications.png" alt="" aria-hidden="true"></span>
+          Applications
+        </a>
+        <a class="side-link" href="#" id="openFeedback">
+          <span class="side-ico"><img loading="lazy" decoding="async" class="side-ico-img"
+              src="assets/images/icon-feedback.png" alt="" aria-hidden="true"></span>
+          Feedback
+        </a>
+        <a class="side-link" href="#" id="openSettingsSidebar">
+          <span class="side-ico"><img loading="lazy" decoding="async" class="side-ico-img"
+              src="assets/images/icon-settings.png" alt="" aria-hidden="true"></span>
+          Settings
+        </a>
+      </nav>
+    </aside>
+
+    <!-- main -->
+    <main class="main">
+      <div class="container main-inner">
+        <!-- welcome banner -->
+        <section class="dash-hero" aria-label="Welcome banner">
+          <div class="dash-hero-text">
+            <div class="dash-hero-kicker" id="dashGreetingKicker">—</div>
+            <h1 class="dash-hero-title">
+              <span id="dashGreetingTo">Welcome back,</span>
+              <span id="dashGreetingName" class="dash-hero-name">—</span>
+            </h1>
+            <p class="dash-hero-sub" id="dashGreetingSub">Loading your snapshot…</p>
+            <div class="dash-focus" id="dashFocus" style="display:none">
+              <span class="dash-focus-ico" aria-hidden="true">›</span>
+              <span class="dash-focus-text" id="dashFocusText"></span>
+            </div>
+          </div>
+          <div class="dash-hero-actions">
+            <button class="btn btn-ghost" type="button" id="tarsQuickBtn">✦ Ask TARS</button>
+            <a class="btn btn-primary" href="internshipdetails.html">Browse internships</a>
+          </div>
+        </section>
+
+        <!-- upcoming interview -->
+        <section class="upcoming-interviews" id="upcomingInterviews" style="display:none"
+          aria-label="Upcoming interviews"></section>
+
+        <!-- quick actions -->
+        <section class="quick-actions quick-actions-3" aria-label="Quick actions">
+          <a class="qa-tile" href="internshipdetails.html">
+            <span class="qa-tile-ico" aria-hidden="true"><img loading="lazy" decoding="async"
+                src="assets/images/icon-find-internship.png" alt=""></span>
+            <div class="qa-tile-text">
+              <strong>Browse internships</strong>
+              <span>Find roles matching your skills</span>
+            </div>
+          </a>
+
+          <a class="qa-tile" href="virtualworkroom.html">
+            <span class="qa-tile-ico" aria-hidden="true"><img loading="lazy" decoding="async"
+                src="assets/images/icon-workroom.png" alt=""></span>
+            <div class="qa-tile-text">
+              <strong>Open Workroom</strong>
+              <span>Continue your assigned tasks</span>
+            </div>
+          </a>
+
+          <button class="qa-tile" type="button" id="qaOpenTars">
+            <span class="qa-tile-ico qa-tile-ico-ai" aria-hidden="true"><img loading="lazy" decoding="async"
+                class="ai-glow" src="assets/images/icons8-ai-64.png" alt=""></span>
+            <div class="qa-tile-text">
+              <strong>Ask TARS</strong>
+              <span>Platform help, career advice</span>
+            </div>
+          </button>
+        </section>
+
+        <!-- kpi cards -->
+        <section class="kpis" aria-label="Summary cards">
+          <article class="kpi">
+            <div class="kpi-top">
+              <span class="kpi-ico kpi-ico-png"><img loading="lazy" decoding="async" class="kpi-ico-img"
+                  src="assets/images/icon-applications.png" alt="" aria-hidden="true"></span>
+              <span class="kpi-tag">Applications</span>
+            </div>
+            <div class="kpi-val">—</div>
+            <div class="kpi-sub muted">Loading…</div>
+          </article>
+
+          <article class="kpi">
+            <div class="kpi-top">
+              <span class="kpi-ico kpi-ico-png"><img loading="lazy" decoding="async" class="kpi-ico-img"
+                  src="assets/images/icon-tasks.png" alt="" aria-hidden="true"></span>
+              <span class="kpi-tag">Tasks</span>
+            </div>
+            <div class="kpi-val">—</div>
+            <div class="kpi-sub muted">Loading…</div>
+          </article>
+
+          <article class="kpi">
+            <div class="kpi-top">
+              <span class="kpi-ico kpi-ico-png"><img loading="lazy" decoding="async" class="kpi-ico-img"
+                  src="assets/images/icon-progress.png" alt="" aria-hidden="true"></span>
+              <span class="kpi-tag">Progress</span>
+            </div>
+            <div class="kpi-val">—</div>
+            <div class="kpi-sub muted">Loading…</div>
+          </article>
+
+          <article class="kpi">
+            <div class="kpi-top">
+              <span class="kpi-ico"><img loading="lazy" decoding="async" class="ai-glow"
+                  src="assets/images/icons8-ai-64.png" alt="Active Role" width="27" height="27"></span>
+              <span class="kpi-tag">Active Role</span>
+            </div>
+            <div class="kpi-val">—</div>
+            <div class="kpi-sub muted">Loading…</div>
+          </article>
+        </section>
+
+        <!-- main grid -->
+        <section class="grid section-spacing" aria-label="Dashboard content">
+          <!-- tasks -->
+          <article class="card card-lg" id="tasksSection">
+            <div class="card-head">
+              <div class="seg">
+                <button class="seg-btn active" type="button" data-filter="all">
+                  All
+                </button>
+                <button class="seg-btn" type="button" data-filter="today">
+                  Today
+                </button>
+                <button class="seg-btn" type="button" data-filter="week">
+                  This week
+                </button>
               </div>
-            </a>
-
-            <a class="qa-tile" href="virtualworkroom.html">
-              <span class="qa-tile-ico" aria-hidden="true"><img loading="lazy" decoding="async" src="assets/images/icon-workroom.png" alt=""></span>
-              <div class="qa-tile-text">
-                <strong>Open Workroom</strong>
-                <span>Continue your assigned tasks</span>
-              </div>
-            </a>
-
-            <button class="qa-tile" type="button" id="qaOpenTars">
-              <span class="qa-tile-ico qa-tile-ico-ai" aria-hidden="true"><img loading="lazy" decoding="async" class="ai-glow" src="assets/images/icons8-ai-64.png" alt=""></span>
-              <div class="qa-tile-text">
-                <strong>Ask TARS</strong>
-                <span>Platform help, career advice</span>
-              </div>
-            </button>
-          </section>
-
-          <!-- kpi cards -->
-          <section class="kpis" aria-label="Summary cards">
-            <article class="kpi">
-              <div class="kpi-top">
-                <span class="kpi-ico kpi-ico-png"><img loading="lazy" decoding="async" class="kpi-ico-img" src="assets/images/icon-applications.png" alt="" aria-hidden="true"></span>
-                <span class="kpi-tag">Applications</span>
-              </div>
-              <div class="kpi-val">—</div>
-              <div class="kpi-sub muted">Loading…</div>
-            </article>
-
-            <article class="kpi">
-              <div class="kpi-top">
-                <span class="kpi-ico kpi-ico-png"><img loading="lazy" decoding="async" class="kpi-ico-img" src="assets/images/icon-tasks.png" alt="" aria-hidden="true"></span>
-                <span class="kpi-tag">Tasks</span>
-              </div>
-              <div class="kpi-val">—</div>
-              <div class="kpi-sub muted">Loading…</div>
-            </article>
-
-            <article class="kpi">
-              <div class="kpi-top">
-                <span class="kpi-ico kpi-ico-png"><img loading="lazy" decoding="async" class="kpi-ico-img" src="assets/images/icon-progress.png" alt="" aria-hidden="true"></span>
-                <span class="kpi-tag">Progress</span>
-              </div>
-              <div class="kpi-val">—</div>
-              <div class="kpi-sub muted">Loading…</div>
-            </article>
-
-            <article class="kpi">
-              <div class="kpi-top">
-                <span class="kpi-ico"><img loading="lazy" decoding="async" class="ai-glow" src="assets/images/icons8-ai-64.png" alt="Active Role" width="27" height="27"></span>
-                <span class="kpi-tag">Active Role</span>
-              </div>
-              <div class="kpi-val">—</div>
-              <div class="kpi-sub muted">Loading…</div>
-            </article>
-          </section>
-
-          <!-- main grid -->
-          <section class="grid section-spacing" aria-label="Dashboard content">
-            <!-- tasks -->
-            <article class="card card-lg" id="tasksSection">
-              <div class="card-head">
-                <div class="seg">
-                  <button
-                    class="seg-btn active"
-                    type="button"
-                    data-filter="all"
-                  >
-                    All
-                  </button>
-                  <button class="seg-btn" type="button" data-filter="today">
-                    Today
-                  </button>
-                  <button class="seg-btn" type="button" data-filter="week">
-                    This week
-                  </button>
-                </div>
-              </div>
-
-              <div class="task-list" id="taskList">
-              </div>
-
-              <div class="card-foot" id="tasksFoot" style="display:none">
-                <button class="btn btn-ghost" type="button" id="tasksToggle">View all tasks</button>
-              </div>
-            </article>
-
-            <!-- right column -->
-            <div class="stack">
-              <!-- ai resume analyzer -->
-              <article class="card" id="resumeAnalyzerCard">
-                <div class="card-head">
-                  <div>
-                    <h2>AI Resume Analyzer</h2>
-                    <p class="muted" id="raMuted">Upload your resume to get an instant AI review.</p>
-                  </div>
-                  <span class="chip" id="raChip">READY</span>
-                </div>
-
-                <!-- idle state -->
-                <div id="raIdle">
-                  <p style="font-size:0.88rem;line-height:1.55;margin:4px 0 12px;opacity:0.78">
-                    Get an instant ATS score, skill match, and targeted improvement tips powered by Gemini.
-                    Drop a PDF resume to begin.
-                  </p>
-                </div>
-
-                <!-- loading state -->
-                <div id="raLoading" style="display:none;padding:16px 0">
-                  <div class="meter" style="margin:4px 0">
-                    <span style="opacity:0.7">Analyzing…</span>
-                    <div class="bar"><i id="raLoadBar" style="width:0%;transition:width 3s cubic-bezier(0.16,1,0.3,1)"></i></div>
-                    <b style="opacity:0.6;font-family:ui-monospace,monospace" id="raLoadPct">0%</b>
-                  </div>
-                  <p style="font-size:0.82rem;opacity:0.6;margin:8px 0 0" id="raLoadStep">Parsing PDF…</p>
-                </div>
-
-                <!-- result state -->
-                <div id="raResult" style="display:none">
-                  <div class="meter">
-                    <span>ATS Score</span>
-                    <div class="bar"><i id="raAtsBar" style="width: 0%"></i></div>
-                    <b id="raAtsVal">0%</b>
-                  </div>
-                  <div class="meter">
-                    <span>Skills Match</span>
-                    <div class="bar"><i id="raSkillsBar" style="width: 0%"></i></div>
-                    <b id="raSkillsVal">0%</b>
-                  </div>
-                  <div class="tip" id="raTip">—</div>
-                  <details id="raDetails" style="margin-top:10px">
-                    <summary style="cursor:pointer;font-size:0.85rem;font-weight:700;opacity:0.78;padding:6px 0">Detailed review</summary>
-                    <div id="raDetailsBody" style="margin-top:8px;font-size:0.88rem;line-height:1.55"></div>
-                  </details>
-                </div>
-
-                <!-- error state -->
-                <div id="raError" style="display:none;padding:12px 14px;border-radius:10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;font-size:0.85rem;line-height:1.5"></div>
-
-                <input type="file" id="raFileInput" accept="application/pdf,.pdf" style="display:none">
-
-                <div class="card-foot">
-                  <button class="btn btn-primary" id="raAnalyzeBtn" type="button">Analyze resume</button>
-                  <button class="btn btn-ghost" id="raClearBtn" type="button" style="display:none">New analysis</button>
-                </div>
-                <p class="muted" id="raFileName" style="font-size:0.78rem;margin-top:8px;display:none;word-break:break-all"></p>
-              </article>
-
-              <!-- activity -->
-              <article class="card" id="activityCard">
-                <div class="card-head">
-                  <div>
-                    <h2>Recent Activity</h2>
-                    <p class="muted">Your latest actions on the platform.</p>
-                  </div>
-                </div>
-
-                <div class="activity" id="activityList">
-                  <div class="activity-empty muted" style="padding:10px 0;font-size:0.88rem">
-                    Loading your activity…
-                  </div>
-                </div>
-
-                <div class="card-foot" id="activityFoot" style="display:none">
-                  <button class="btn btn-ghost" type="button" id="activityToggle">View all activity</button>
-                </div>
-              </article>
-
-              <!-- profile completeness -->
-              <article class="card" id="completenessCard">
-                <div class="card-head">
-                  <div>
-                    <h2>Profile completeness</h2>
-                    <p class="muted">Stronger profiles get noticed faster.</p>
-                  </div>
-                  <span class="chip" id="completenessChip">—</span>
-                </div>
-
-                <div class="completeness-bar">
-                  <div class="completeness-fill" id="completenessFill" style="width:0%"></div>
-                </div>
-
-                <ul class="completeness-list" id="completenessList"></ul>
-
-                <div class="card-foot">
-                  <button class="btn btn-primary" type="button" id="completenessEditBtn">Complete profile</button>
-                </div>
-              </article>
             </div>
 
-            <!-- company feedback -->
-            <article class="card card-wide" id="feedbackSection">
+            <div class="task-list" id="taskList">
+            </div>
+
+            <div class="card-foot" id="tasksFoot" style="display:none">
+              <button class="btn btn-ghost" type="button" id="tasksToggle">View all tasks</button>
+            </div>
+          </article>
+
+          <!-- right column -->
+          <div class="stack">
+            <!-- ai resume analyzer -->
+            <article class="card" id="resumeAnalyzerCard">
               <div class="card-head">
                 <div>
-                  <h2>Your Company &amp; Feedback</h2>
-                  <p class="muted" id="feedbackSubtitle">Your assigned company and their feedback on your submissions will appear here.</p>
+                  <h2>AI Resume Analyzer</h2>
+                  <p class="muted" id="raMuted">Upload your resume to get an instant AI review.</p>
                 </div>
-                <span class="chip" id="feedbackStatusChip" style="display:none">Active</span>
+                <span class="chip" id="raChip">READY</span>
               </div>
 
-              <!-- locked state -->
-              <div id="feedbackLocked" class="feedback-locked" style="padding:36px 20px;text-align:center;border-radius:16px;background:rgba(124,107,255,0.06);border:1px dashed rgba(124,107,255,0.25)">
-                <div style="width:56px;height:56px;margin:0 auto 14px;border-radius:999px;display:grid;place-items:center;background:linear-gradient(135deg,rgba(124,107,255,0.2),rgba(236,72,153,0.2));font-size:24px">🔒</div>
-                <h3 style="margin:0 0 6px;font-size:1.05rem;font-weight:800">Join a virtual internship to unlock</h3>
-                <p class="muted" style="font-size:0.92rem;margin:0;line-height:1.6">
-                  Once your application is approved, your company's feedback and the support section will appear here.
+              <!-- idle state -->
+              <div id="raIdle">
+                <p style="font-size:0.88rem;line-height:1.55;margin:4px 0 12px;opacity:0.78">
+                  Get an instant ATS score, skill match, and targeted improvement tips powered by Gemini.
+                  Drop a PDF resume to begin.
                 </p>
               </div>
 
-              <!-- unlocked state -->
-              <div id="feedbackUnlocked" style="display:none">
-                <div id="companyInfo" style="display:flex;gap:14px;align-items:center;padding:14px;border-radius:14px;background:rgba(124,107,255,0.08);border:1px solid rgba(124,107,255,0.18);margin-bottom:14px">
-                  <div style="width:48px;height:48px;border-radius:12px;display:grid;place-items:center;font-weight:900;background:linear-gradient(135deg,#7c6bff,#a855f7);color:#fff" id="companyAvatar">—</div>
-                  <div style="flex:1;min-width:0">
-                    <div style="font-weight:800;font-size:1rem" id="companyNameLbl">Company</div>
-                    <div class="muted" style="font-size:0.85rem" id="internshipTitleLbl">Role</div>
-                  </div>
+              <!-- loading state -->
+              <div id="raLoading" style="display:none;padding:16px 0">
+                <div class="meter" style="margin:4px 0">
+                  <span style="opacity:0.7">Analyzing…</span>
+                  <div class="bar"><i id="raLoadBar"
+                      style="width:0%;transition:width 3s cubic-bezier(0.16,1,0.3,1)"></i></div>
+                  <b style="opacity:0.6;font-family:ui-monospace,monospace" id="raLoadPct">0%</b>
                 </div>
-                <h4 style="margin:0 0 10px;font-size:0.95rem;font-weight:700;opacity:0.85">Feedback on your submissions</h4>
-                <div id="feedbackList" style="display:flex;flex-direction:column;gap:10px"></div>
-                <p id="feedbackEmpty" class="muted" style="display:none;font-size:0.88rem;padding:12px 0">No feedback yet — submit a task and your company will review it here.</p>
+                <p style="font-size:0.82rem;opacity:0.6;margin:8px 0 0" id="raLoadStep">Parsing PDF…</p>
               </div>
+
+              <!-- result state -->
+              <div id="raResult" style="display:none">
+                <div class="meter">
+                  <span>ATS Score</span>
+                  <div class="bar"><i id="raAtsBar" style="width: 0%"></i></div>
+                  <b id="raAtsVal">0%</b>
+                </div>
+                <div class="meter">
+                  <span>Skills Match</span>
+                  <div class="bar"><i id="raSkillsBar" style="width: 0%"></i></div>
+                  <b id="raSkillsVal">0%</b>
+                </div>
+                <div class="tip" id="raTip">—</div>
+                <details id="raDetails" style="margin-top:10px">
+                  <summary style="cursor:pointer;font-size:0.85rem;font-weight:700;opacity:0.78;padding:6px 0">Detailed
+                    review</summary>
+                  <div id="raDetailsBody" style="margin-top:8px;font-size:0.88rem;line-height:1.55"></div>
+                </details>
+              </div>
+
+              <!-- error state -->
+              <div id="raError"
+                style="display:none;padding:12px 14px;border-radius:10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;font-size:0.85rem;line-height:1.5">
+              </div>
+
+              <input type="file" id="raFileInput" accept="application/pdf,.pdf" style="display:none">
+
+              <div class="card-foot">
+                <button class="btn btn-primary" id="raAnalyzeBtn" type="button">Analyze resume</button>
+                <button class="btn btn-ghost" id="raClearBtn" type="button" style="display:none">New analysis</button>
+              </div>
+              <p class="muted" id="raFileName"
+                style="font-size:0.78rem;margin-top:8px;display:none;word-break:break-all"></p>
             </article>
 
-            <!-- applications table -->
-            <article class="card card-wide" id="applicationsSection">
+            <!-- activity -->
+            <article class="card" id="activityCard">
               <div class="card-head">
                 <div>
-                  <h2>Applications</h2>
-                  <p class="muted">Track status & updates.</p>
+                  <h2>Recent Activity</h2>
+                  <p class="muted">Your latest actions on the platform.</p>
                 </div>
-                <button class="btn btn-ghost" type="button">View all</button>
               </div>
 
-                  <div class="filter-bar">
-  <button class="filter-btn active" data-filter="all">All</button>
-  <button class="filter-btn" data-filter="Pending">Pending</button>
-  <button class="filter-btn" data-filter="Shortlisted">Shortlisted</button>
-  <button class="filter-btn" data-filter="Approved">Approved</button>
-  <button class="filter-btn" data-filter="Rejected">Rejected</button>
-</div>
-              <div class="table-wrap">
-                <table class="table" aria-label="Applications table">
-                  <thead>
-                    <tr>
-                      <th>Company</th>
-                      <th>Role</th>
-                      <th>Status</th>
-                      <th>Updated</th>
-                      <th></th>
-                    </tr>
-                  </thead>
+              <div class="activity" id="activityList">
+                <div class="activity-empty muted" style="padding:10px 0;font-size:0.88rem">
+                  Loading your activity…
+                </div>
+              </div>
 
- <tbody id="applicationsTableBody">
-  <tr>
-    <td colspan="5" class="muted">No applications yet</td>
-  </tr>
-</tbody>
-                </table>
+              <div class="card-foot" id="activityFoot" style="display:none">
+                <button class="btn btn-ghost" type="button" id="activityToggle">View all activity</button>
               </div>
             </article>
-          </section>
 
-        </div>
-      </main>
-    </div>
+            <!-- profile completeness -->
+            <article class="card" id="completenessCard">
+              <div class="card-head">
+                <div>
+                  <h2>Profile completeness</h2>
+                  <p class="muted">Stronger profiles get noticed faster.</p>
+                </div>
+                <span class="chip" id="completenessChip">—</span>
+              </div>
 
-    <div id="appModal" class="app-details-modal hidden" role="dialog" aria-labelledby="appDetailsTitle" aria-modal="true">
-  <div class="app-details-card">
-    <button type="button" class="app-close" onclick="closeModal()" aria-label="Close">✕</button>
-    <div class="app-details-header">
-      <div class="app-details-kicker">Application</div>
-      <h3 id="appDetailsTitle">Application Details</h3>
-      <p class="app-details-sub">Overview of your submission and current review status.</p>
-    </div>
-    <div class="app-details-body" id="modalContent"></div>
-    <div class="app-details-footer">
-      <button type="button" class="btn btn-ghost" onclick="closeModal()">Close</button>
+              <div class="completeness-bar">
+                <div class="completeness-fill" id="completenessFill" style="width:0%"></div>
+              </div>
+
+              <ul class="completeness-list" id="completenessList"></ul>
+
+              <div class="card-foot">
+                <button class="btn btn-primary" type="button" id="completenessEditBtn">Complete profile</button>
+              </div>
+            </article>
+          </div>
+
+          <!-- company feedback -->
+          <article class="card card-wide" id="feedbackSection">
+            <div class="card-head">
+              <div>
+                <h2>Your Company &amp; Feedback</h2>
+                <p class="muted" id="feedbackSubtitle">Your assigned company and their feedback on your submissions will
+                  appear here.</p>
+              </div>
+              <span class="chip" id="feedbackStatusChip" style="display:none">Active</span>
+            </div>
+
+            <!-- locked state -->
+            <div id="feedbackLocked" class="feedback-locked"
+              style="padding:36px 20px;text-align:center;border-radius:16px;background:rgba(124,107,255,0.06);border:1px dashed rgba(124,107,255,0.25)">
+              <div
+                style="width:56px;height:56px;margin:0 auto 14px;border-radius:999px;display:grid;place-items:center;background:linear-gradient(135deg,rgba(124,107,255,0.2),rgba(236,72,153,0.2));font-size:24px">
+                🔒</div>
+              <h3 style="margin:0 0 6px;font-size:1.05rem;font-weight:800">Join a virtual internship to unlock</h3>
+              <p class="muted" style="font-size:0.92rem;margin:0;line-height:1.6">
+                Once your application is approved, your company's feedback and the support section will appear here.
+              </p>
+            </div>
+
+            <!-- unlocked state -->
+            <div id="feedbackUnlocked" style="display:none">
+              <div id="companyInfo"
+                style="display:flex;gap:14px;align-items:center;padding:14px;border-radius:14px;background:rgba(124,107,255,0.08);border:1px solid rgba(124,107,255,0.18);margin-bottom:14px">
+                <div
+                  style="width:48px;height:48px;border-radius:12px;display:grid;place-items:center;font-weight:900;background:linear-gradient(135deg,#7c6bff,#a855f7);color:#fff"
+                  id="companyAvatar">—</div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-weight:800;font-size:1rem" id="companyNameLbl">Company</div>
+                  <div class="muted" style="font-size:0.85rem" id="internshipTitleLbl">Role</div>
+                </div>
+              </div>
+              <h4 style="margin:0 0 10px;font-size:0.95rem;font-weight:700;opacity:0.85">Feedback on your submissions
+              </h4>
+              <div id="feedbackList" style="display:flex;flex-direction:column;gap:10px"></div>
+              <p id="feedbackEmpty" class="muted" style="display:none;font-size:0.88rem;padding:12px 0">No feedback yet
+                — submit a task and your company will review it here.</p>
+            </div>
+          </article>
+
+          <!-- certificates -->
+          <article class="card card-wide" id="certificatesSection" style="display:none">
+            <div class="card-head">
+              <div>
+                <h2>Your Certificates</h2>
+                <p class="muted">Official documents from your internship.</p>
+              </div>
+            </div>
+
+            <div class="certs-grid">
+              <!-- Offer letter -->
+              <div class="cert-tile" id="certOfferTile" data-state="locked">
+                <div class="cert-tile__ico" aria-hidden="true">📄</div>
+                <div class="cert-tile__body">
+                  <div class="cert-tile__title">Offer Letter</div>
+                  <div class="cert-tile__sub" id="certOfferStatus">Locked — waiting for your company to issue.</div>
+                </div>
+                <button class="btn btn-primary cert-tile__btn" id="certOfferBtn" type="button" disabled>
+                  <span class="cert-tile__lock">🔒</span>
+                  <span class="cert-tile__label">Locked</span>
+                </button>
+              </div>
+
+              <!-- Completion certificate -->
+              <div class="cert-tile" id="certCompletionTile" data-state="locked">
+                <div class="cert-tile__ico" aria-hidden="true">🎓</div>
+                <div class="cert-tile__body">
+                  <div class="cert-tile__title">Completion Certificate</div>
+                  <div class="cert-tile__sub" id="certCompletionStatus">Finish your final task, then your company will approve.</div>
+                </div>
+                <button class="btn btn-primary cert-tile__btn" id="certCompletionBtn" type="button" disabled>
+                  <span class="cert-tile__lock">🔒</span>
+                  <span class="cert-tile__label">Locked</span>
+                </button>
+              </div>
+            </div>
+          </article>
+
+          <!-- applications table -->
+          <article class="card card-wide" id="applicationsSection">
+            <div class="card-head">
+              <div>
+                <h2>Applications</h2>
+                <p class="muted">Track status & updates.</p>
+              </div>
+              <button class="btn btn-ghost" type="button" id="appsViewAllBtn">View all</button>
+            </div>
+
+            <div class="filter-bar">
+              <button class="filter-btn active" data-filter="all">All</button>
+              <button class="filter-btn" data-filter="Pending">Pending</button>
+              <button class="filter-btn" data-filter="Shortlisted">Shortlisted</button>
+              <button class="filter-btn" data-filter="Approved">Approved</button>
+              <button class="filter-btn" data-filter="Rejected">Rejected</button>
+            </div>
+            <div class="table-wrap">
+              <table class="table" aria-label="Applications table">
+                <thead>
+                  <tr>
+                    <th>Company</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Updated</th>
+                    <th></th>
+                  </tr>
+                </thead>
+
+                <tbody id="applicationsTableBody">
+                  <tr>
+                    <td colspan="5" class="muted">No applications yet</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <div id="appModal" class="app-details-modal hidden" role="dialog" aria-labelledby="appDetailsTitle" aria-modal="true">
+    <div class="app-details-card">
+      <button type="button" class="app-close" onclick="closeModal()" aria-label="Close">✕</button>
+      <div class="app-details-header">
+        <div class="app-details-kicker">Application</div>
+        <h3 id="appDetailsTitle">Application Details</h3>
+        <p class="app-details-sub">Overview of your submission and current review status.</p>
+      </div>
+      <div class="app-details-body" id="modalContent"></div>
+      <div class="app-details-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">Close</button>
+      </div>
     </div>
   </div>
-</div>
 
-  
 
-<!-- settings modal -->
 
-<div id="settingsModal" class="hidden">
-  <div class="modal-content">
-    <span id="closeSettingsModal" class="close-btn">&times;</span>
-    <h2>
-      <img loading="lazy" decoding="async" class="settings-title-ico" src="assets/images/icon-settings.png" alt="" aria-hidden="true">
-      Settings
-    </h2>
+  <!-- settings modal -->
 
-    <div class="settings-section">
-      <h3>
-        <img loading="lazy" decoding="async" class="settings-sec-ico" src="assets/images/icon-user.png" alt="" aria-hidden="true">
-        Account
-      </h3>
+  <div id="settingsModal" class="hidden">
+    <div class="modal-content">
+      <span id="closeSettingsModal" class="close-btn">&times;</span>
+      <h2>
+        <img loading="lazy" decoding="async" class="settings-title-ico" src="assets/images/icon-settings.png" alt=""
+          aria-hidden="true">
+        Settings
+      </h2>
 
-      <!-- email -->
-      <div class="setting-group">
-        <input type="email" id="changeEmailInput" placeholder="New Email">
-        <button id="changeEmailBtn" class="settings-btn">Update Email</button>
-        <p class="setting-status" id="emailStatus"></p>
-      </div>
+      <div class="settings-section">
+        <h3>
+          <img loading="lazy" decoding="async" class="settings-sec-ico" src="assets/images/icon-user.png" alt=""
+            aria-hidden="true">
+          Account
+        </h3>
 
-      <!-- password -->
-      <div class="setting-group">
-        <input type="password" id="changePasswordInput" placeholder="New Password">
-        <button id="changePasswordBtn" class="settings-btn">Update Password</button>
-        <p class="setting-status" id="passwordStatus"></p>
-      </div>
-
-      <!-- profile -->
-      <div class="setting-group">
-        <input type="text" id="changeNameInput" placeholder="Full Name">
-        <button id="updateProfileBtn" class="settings-btn">Update Profile</button>
-        <p class="setting-status" id="profileStatus"></p>
-      </div>
-    </div>
-
-    <div class="settings-section">
-      <h3>
-        <img loading="lazy" decoding="async" class="settings-sec-ico" src="assets/images/icon-support.png" alt="" aria-hidden="true">
-        Support
-      </h3>
-      <textarea id="contactUsMessage" wrap="soft" rows="4" placeholder="Message to support"></textarea>
-      <button id="contactUsBtn">Send</button>
-      <p class="setting-status" id="supportStatus"></p>
-    </div>
-
-    <div class="settings-section">
-      <h3>
-        <img loading="lazy" decoding="async" class="settings-sec-ico" src="assets/images/icon-lock.png" alt="" aria-hidden="true">
-        Security
-      </h3>
-      <button id="logoutBtn">Logout</button>
-    </div>
-  </div>
-</div>
-
-<!-- profile modal -->
-<div id="profileModal" class="completion-modal profile-modal" style="align-items:flex-start;padding-top:4vh">
-  <div class="completion-card profile-card" style="max-width:640px;width:100%;text-align:left;padding:0;overflow:hidden;max-height:92vh;display:flex;flex-direction:column">
-
-    <!-- header + avatar -->
-    <div class="profile-banner" style="position:relative;padding:28px 28px 64px;background:linear-gradient(135deg,rgba(124,107,255,0.18),rgba(236,72,153,0.12))">
-      <button type="button" id="closeProfileModal" style="position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:10px;border:1px solid rgba(148,163,184,0.28);background:rgba(148,163,184,0.15);color:inherit;cursor:pointer;font-size:18px;z-index:2">✕</button>
-      <h2 style="margin:0;font-size:1.35rem;background:linear-gradient(135deg,#7c6bff,#a855f7);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:900;letter-spacing:-0.02em">Your Profile</h2>
-      <p style="margin:4px 0 0;font-size:0.82rem;opacity:0.7">Keep your details up to date — companies see this when reviewing you.</p>
-
-      <!-- availability pill -->
-      <div style="position:absolute;top:52px;right:22px;display:flex;align-items:center;gap:8px;font-size:0.78rem">
-        <span style="opacity:0.75">Availability</span>
-        <label class="switch-wrap" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="profileAvailability" checked style="appearance:none;width:36px;height:20px;border-radius:999px;background:rgba(148,163,184,0.28);position:relative;cursor:pointer;transition:background 200ms;margin:0" />
-          <span id="profileAvailabilityLabel" style="font-weight:700;color:#22c55e">Available</span>
-        </label>
-      </div>
-    </div>
-
-    <!-- avatar -->
-    <div style="display:flex;align-items:flex-end;gap:16px;padding:0 28px;margin-top:-44px;position:relative;z-index:1">
-      <div id="profilePicWrap" style="position:relative;width:96px;height:96px;border-radius:999px;background:linear-gradient(135deg,#7c6bff,#a855f7);display:grid;place-items:center;overflow:hidden;border:4px solid var(--bg, #14181f);box-shadow:0 10px 28px rgba(124,107,255,0.4);flex-shrink:0">
-        <span id="profilePicInitials" style="font-size:1.8rem;font-weight:900;color:#fff">U</span>
-        <img loading="lazy" decoding="async" id="profilePicImg" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none" alt="">
-      </div>
-      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
-        <label for="profilePicInput" style="font-size:0.78rem;padding:6px 12px;border-radius:999px;background:rgba(124,107,255,0.15);color:#a855f7;border:1px solid rgba(124,107,255,0.3);cursor:pointer;font-weight:700;display:inline-block;width:max-content">Change photo</label>
-        <input type="file" id="profilePicInput" accept="image/png,image/jpeg,image/webp" style="display:none">
-        <button type="button" id="removeProfilePic" style="font-size:0.72rem;background:transparent;border:0;color:inherit;opacity:0.55;cursor:pointer;text-decoration:underline;display:none;text-align:left;padding:0;width:max-content">Remove photo</button>
-      </div>
-    </div>
-
-    <!-- scrollable body -->
-    <div class="modal-scroll" style="flex:1;overflow-y:auto;padding:18px 28px 4px">
-
-      <!-- identity -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div style="grid-column:1 / -1">
-          <label class="pf-lbl">Full Name</label>
-          <input id="profileName" type="text" placeholder="Your name" class="pf-in">
+        <!-- email -->
+        <div class="setting-group">
+          <input type="email" id="changeEmailInput" placeholder="New Email">
+          <button id="changeEmailBtn" class="settings-btn">Update Email</button>
+          <p class="setting-status" id="emailStatus"></p>
         </div>
-        <div>
-          <label class="pf-lbl">Phone Number</label>
-          <input id="profilePhone" type="tel" placeholder="+91 98765 43210" class="pf-in">
+
+        <!-- password -->
+        <div class="setting-group">
+          <input type="password" id="changePasswordInput" placeholder="New Password">
+          <button id="changePasswordBtn" class="settings-btn">Update Password</button>
+          <p class="setting-status" id="passwordStatus"></p>
         </div>
-        <div>
-          <label class="pf-lbl">Location</label>
-          <input id="profileLocation" type="text" placeholder="Mumbai, IN" class="pf-in">
-        </div>
-        <div style="grid-column:1 / -1">
-          <label class="pf-lbl">Email <span style="opacity:0.5;font-weight:500">(read-only)</span></label>
-          <input id="profileEmail" type="email" disabled class="pf-in" style="opacity:0.6;cursor:not-allowed">
-        </div>
-        <div style="grid-column:1 / -1">
-          <label class="pf-lbl">Bio <span id="profileBioCount" style="opacity:0.5;font-weight:500;float:right">0 / 180</span></label>
-          <textarea id="profileBio" rows="3" maxlength="180" placeholder="A short introduction — who you are, what you're into." class="pf-in" style="resize:vertical;min-height:70px;font-family:inherit"></textarea>
+
+        <!-- profile -->
+        <div class="setting-group">
+          <input type="text" id="changeNameInput" placeholder="Full Name">
+          <button id="updateProfileBtn" class="settings-btn">Update Profile</button>
+          <p class="setting-status" id="profileStatus"></p>
         </div>
       </div>
 
-      <!-- education -->
-      <div style="margin-top:18px;padding-top:16px;border-top:1px dashed rgba(148,163,184,0.28)">
-        <h4 class="pf-sec">🎓 Education</h4>
-        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px">
-          <div>
-            <label class="pf-lbl">College / University</label>
-            <input id="profileCollege" type="text" placeholder="IIT Bombay" class="pf-in">
-          </div>
-          <div>
-            <label class="pf-lbl">Graduation Year</label>
-            <input id="profileGradYear" type="number" min="1990" max="2040" placeholder="2027" class="pf-in">
-          </div>
-          <div>
-            <label class="pf-lbl">Major</label>
-            <input id="profileMajor" type="text" placeholder="CSE" class="pf-in">
-          </div>
-        </div>
+      <div class="settings-section">
+        <h3>
+          <img loading="lazy" decoding="async" class="settings-sec-ico" src="assets/images/icon-support.png" alt=""
+            aria-hidden="true">
+          Support
+        </h3>
+        <textarea id="contactUsMessage" wrap="soft" rows="4" placeholder="Message to support"></textarea>
+        <button id="contactUsBtn">Send</button>
+        <p class="setting-status" id="supportStatus"></p>
       </div>
 
-      <!-- skills -->
-      <div style="margin-top:18px;padding-top:16px;border-top:1px dashed rgba(148,163,184,0.28)">
-        <h4 class="pf-sec">⚡ Skills</h4>
-        <label class="pf-lbl">Add skills — comma or Enter to confirm</label>
-        <div id="profileSkillsChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
-        <input id="profileSkillInput" type="text" placeholder="React, Figma, Node.js…" class="pf-in">
+      <div class="settings-section">
+        <h3>
+          <img loading="lazy" decoding="async" class="settings-sec-ico" src="assets/images/icon-lock.png" alt=""
+            aria-hidden="true">
+          Security
+        </h3>
+        <button id="logoutBtn">Logout</button>
       </div>
-
-      <!-- links -->
-      <div style="margin-top:18px;padding-top:16px;border-top:1px dashed rgba(148,163,184,0.28)">
-        <h4 class="pf-sec">🔗 Links</h4>
-        <div style="display:grid;grid-template-columns:1fr;gap:10px">
-          <div style="display:flex;align-items:center;gap:10px">
-            <span class="pf-ico" style="background:rgba(10,102,194,0.18);color:#60a5fa">in</span>
-            <input id="profileLinkedIn" type="url" placeholder="https://linkedin.com/in/your-handle" class="pf-in" style="flex:1">
-          </div>
-          <div style="display:flex;align-items:center;gap:10px">
-            <span class="pf-ico" aria-label="GitHub" style="background:rgba(148,163,184,0.22);color:inherit"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.38 7.86 10.9.58.1.79-.25.79-.56v-2c-3.2.7-3.87-1.37-3.87-1.37-.52-1.32-1.28-1.67-1.28-1.67-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.2 1.77 1.2 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.2-3.1-.12-.29-.52-1.47.11-3.06 0 0 .98-.31 3.2 1.19.93-.26 1.93-.39 2.92-.39s1.99.13 2.92.39c2.22-1.5 3.2-1.19 3.2-1.19.63 1.59.23 2.77.11 3.06.75.81 1.2 1.84 1.2 3.1 0 4.42-2.7 5.39-5.27 5.68.41.36.79 1.07.79 2.16v3.2c0 .31.21.67.8.56C20.21 21.37 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z"/></svg></span>
-            <input id="profileGitHub" type="url" placeholder="https://github.com/your-handle" class="pf-in" style="flex:1">
-          </div>
-          <div style="display:flex;align-items:center;gap:10px">
-            <span class="pf-ico" style="background:rgba(236,72,153,0.18);color:#ec4899">🌐</span>
-            <input id="profilePortfolio" type="url" placeholder="https://your-portfolio.com" class="pf-in" style="flex:1">
-          </div>
-        </div>
-      </div>
-
-      <!-- account meta -->
-      <div style="margin-top:18px;padding-top:16px;border-top:1px dashed rgba(148,163,184,0.28);display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:0.82rem">
-        <div>
-          <div class="pf-lbl">Member since</div>
-          <div id="profileMemberSince" style="font-weight:700;color:var(--text-1,#f0f2fa)">—</div>
-        </div>
-        <div>
-          <div class="pf-lbl">Student ID</div>
-          <div id="profileUid" style="font-family:var(--mono);font-size:11px;color:var(--text-2,rgba(255,255,255,0.7));word-break:break-all">—</div>
-        </div>
-      </div>
-
-      <p id="profileStatusMsg" style="font-size:0.82rem;margin:14px 0 0;min-height:18px"></p>
-    </div>
-
-    <!-- sticky footer -->
-    <div style="display:flex;justify-content:flex-end;gap:8px;padding:14px 28px;border-top:1px solid rgba(148,163,184,0.2);background:transparent">
-      <button type="button" class="btn btn-ghost" id="cancelProfileBtn">Cancel</button>
-      <button type="button" class="btn btn-primary" id="saveProfileBtn">Save Profile</button>
     </div>
   </div>
-</div>
 
-<style>
-  /* Profile modal styles — scoped to .profile-modal */
-  .profile-modal .pf-lbl {
-    display: block;
-    font-size: 0.74rem;
-    font-weight: 700;
-    opacity: 0.7;
-    margin-bottom: 5px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-  .profile-modal .pf-in {
-    width: 100%;
-    padding: 10px 12px;
-    border-radius: 10px;
-    border: 1px solid rgba(255,255,255,0.1);
-    background: rgba(255,255,255,0.04);
-    color: inherit;
-    font-size: 0.9rem;
-    font-family: inherit;
-    transition: border-color 200ms, background 200ms, box-shadow 200ms;
-  }
-  .profile-modal .pf-in:focus {
-    outline: 0;
-    border-color: rgba(124,107,255,0.5);
-    background: rgba(255,255,255,0.06);
-    box-shadow: 0 0 0 3px rgba(124,107,255,0.14);
-  }
-  .profile-modal .pf-sec {
-    margin: 0 0 10px;
-    font-size: 0.84rem;
-    font-weight: 800;
-    letter-spacing: 0.02em;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .profile-modal .pf-ico {
-    width: 30px; height: 30px; border-radius: 9px;
-    display: grid; place-items: center;
-    font-weight: 900; font-size: 13px;
-    flex-shrink: 0;
-  }
-  .profile-modal .skill-chip {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 5px 10px; border-radius: 999px;
-    background: rgba(124,107,255,0.14);
-    color: #c4b5fd;
-    border: 1px solid rgba(124,107,255,0.28);
-    font-size: 0.78rem; font-weight: 700;
-    cursor: default;
-  }
-  .profile-modal .skill-chip button {
-    background: none; border: 0; color: inherit;
-    cursor: pointer; font-size: 14px; line-height: 1;
-    opacity: 0.6; padding: 0;
-  }
-  .profile-modal .skill-chip button:hover { opacity: 1; }
-  /* Switch thumb */
-  .profile-modal #profileAvailability::before {
-    content: ""; position: absolute;
-    width: 14px; height: 14px; border-radius: 999px;
-    background: #f59e0b; top: 3px; left: 3px;
-    transition: transform 200ms, background 200ms;
-  }
-  .profile-modal #profileAvailability { position: relative; }
-  .profile-modal #profileAvailability:checked { background: rgba(34,197,94,0.35); }
-  .profile-modal #profileAvailability:checked::before { transform: translateX(16px); background: #22c55e; }
+  <!-- profile modal -->
+  <div id="profileModal" class="completion-modal profile-modal" style="align-items:flex-start;padding-top:4vh">
+    <div class="completion-card profile-card"
+      style="max-width:640px;width:100%;text-align:left;padding:0;overflow:hidden;max-height:92vh;display:flex;flex-direction:column">
 
-  body.theme-light .profile-modal .pf-in {
-    background: rgba(0,0,0,0.03);
-    border-color: rgba(0,0,0,0.1);
-  }
-  body.theme-light .profile-modal .pf-in:focus {
-    background: #fff;
-    border-color: rgba(124,107,255,0.5);
-  }
-  /* Skill chip palette is tuned for dark theme (#c4b5fd on pale-purple
+      <!-- header + avatar -->
+      <div class="profile-banner"
+        style="position:relative;padding:28px 28px 64px;background:linear-gradient(135deg,rgba(124,107,255,0.18),rgba(236,72,153,0.12))">
+        <button type="button" id="closeProfileModal"
+          style="position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:10px;border:1px solid rgba(148,163,184,0.28);background:rgba(148,163,184,0.15);color:inherit;cursor:pointer;font-size:18px;z-index:2">✕</button>
+        <h2
+          style="margin:0;font-size:1.35rem;background:linear-gradient(135deg,#7c6bff,#a855f7);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:900;letter-spacing:-0.02em">
+          Your Profile</h2>
+        <p style="margin:4px 0 0;font-size:0.82rem;opacity:0.7">Keep your details up to date — companies see this when
+          reviewing you.</p>
+
+        <!-- availability pill -->
+        <div style="position:absolute;top:52px;right:22px;display:flex;align-items:center;gap:8px;font-size:0.78rem">
+          <span style="opacity:0.75">Availability</span>
+          <label class="switch-wrap" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="profileAvailability" checked
+              style="appearance:none;width:36px;height:20px;border-radius:999px;background:rgba(148,163,184,0.28);position:relative;cursor:pointer;transition:background 200ms;margin:0" />
+            <span id="profileAvailabilityLabel" style="font-weight:700;color:#22c55e">Available</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- avatar -->
+      <div
+        style="display:flex;align-items:flex-end;gap:16px;padding:0 28px;margin-top:-44px;position:relative;z-index:1">
+        <div id="profilePicWrap"
+          style="position:relative;width:96px;height:96px;border-radius:999px;background:linear-gradient(135deg,#7c6bff,#a855f7);display:grid;place-items:center;overflow:hidden;border:4px solid var(--bg, #14181f);box-shadow:0 10px 28px rgba(124,107,255,0.4);flex-shrink:0">
+          <span id="profilePicInitials" style="font-size:1.8rem;font-weight:900;color:#fff">U</span>
+          <img loading="lazy" decoding="async" id="profilePicImg"
+            style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none" alt="">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
+          <label for="profilePicInput"
+            style="font-size:0.78rem;padding:6px 12px;border-radius:999px;background:rgba(124,107,255,0.15);color:#a855f7;border:1px solid rgba(124,107,255,0.3);cursor:pointer;font-weight:700;display:inline-block;width:max-content">Change
+            photo</label>
+          <input type="file" id="profilePicInput" accept="image/png,image/jpeg,image/webp" style="display:none">
+          <button type="button" id="removeProfilePic"
+            style="font-size:0.72rem;background:transparent;border:0;color:inherit;opacity:0.55;cursor:pointer;text-decoration:underline;display:none;text-align:left;padding:0;width:max-content">Remove
+            photo</button>
+        </div>
+      </div>
+
+      <!-- scrollable body -->
+      <div class="modal-scroll" style="flex:1;overflow-y:auto;padding:18px 28px 4px">
+
+        <!-- identity -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div style="grid-column:1 / -1">
+            <label class="pf-lbl">Full Name</label>
+            <input id="profileName" type="text" placeholder="Your name" class="pf-in">
+          </div>
+          <div>
+            <label class="pf-lbl">Phone Number</label>
+            <input id="profilePhone" type="tel" placeholder="+91 98765 43210" class="pf-in">
+          </div>
+          <div>
+            <label class="pf-lbl">Location</label>
+            <input id="profileLocation" type="text" placeholder="Mumbai, IN" class="pf-in">
+          </div>
+          <div style="grid-column:1 / -1">
+            <label class="pf-lbl">Email <span style="opacity:0.5;font-weight:500">(read-only)</span></label>
+            <input id="profileEmail" type="email" disabled class="pf-in" style="opacity:0.6;cursor:not-allowed">
+          </div>
+          <div style="grid-column:1 / -1">
+            <label class="pf-lbl">Bio <span id="profileBioCount" style="opacity:0.5;font-weight:500;float:right">0 /
+                180</span></label>
+            <textarea id="profileBio" rows="3" maxlength="180"
+              placeholder="A short introduction — who you are, what you're into." class="pf-in"
+              style="resize:vertical;min-height:70px;font-family:inherit"></textarea>
+          </div>
+        </div>
+
+        <!-- education -->
+        <div style="margin-top:18px;padding-top:16px;border-top:1px dashed rgba(148,163,184,0.28)">
+          <h4 class="pf-sec">🎓 Education</h4>
+          <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px">
+            <div>
+              <label class="pf-lbl">College / University</label>
+              <input id="profileCollege" type="text" placeholder="IIT Bombay" class="pf-in">
+            </div>
+            <div>
+              <label class="pf-lbl">Graduation Year</label>
+              <input id="profileGradYear" type="number" min="1990" max="2040" placeholder="2027" class="pf-in">
+            </div>
+            <div>
+              <label class="pf-lbl">Degree</label>
+              <input id="profileMajor" type="text" placeholder="B.Tech CSE" class="pf-in">
+            </div>
+          </div>
+        </div>
+
+        <!-- skills -->
+        <div style="margin-top:18px;padding-top:16px;border-top:1px dashed rgba(148,163,184,0.28)">
+          <h4 class="pf-sec">⚡ Skills</h4>
+          <label class="pf-lbl">Add skills — comma or Enter to confirm</label>
+          <div id="profileSkillsChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+          <input id="profileSkillInput" type="text" placeholder="React, Figma, Node.js…" class="pf-in">
+        </div>
+
+        <!-- links -->
+        <div style="margin-top:18px;padding-top:16px;border-top:1px dashed rgba(148,163,184,0.28)">
+          <h4 class="pf-sec">🔗 Links</h4>
+          <div style="display:grid;grid-template-columns:1fr;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="pf-ico" style="background:rgba(10,102,194,0.18);color:#60a5fa">in</span>
+              <input id="profileLinkedIn" type="url" placeholder="https://linkedin.com/in/your-handle" class="pf-in"
+                style="flex:1">
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="pf-ico" aria-label="GitHub" style="background:rgba(148,163,184,0.22);color:inherit"><svg
+                  viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                  <path
+                    d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.38 7.86 10.9.58.1.79-.25.79-.56v-2c-3.2.7-3.87-1.37-3.87-1.37-.52-1.32-1.28-1.67-1.28-1.67-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.2 1.77 1.2 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.2-3.1-.12-.29-.52-1.47.11-3.06 0 0 .98-.31 3.2 1.19.93-.26 1.93-.39 2.92-.39s1.99.13 2.92.39c2.22-1.5 3.2-1.19 3.2-1.19.63 1.59.23 2.77.11 3.06.75.81 1.2 1.84 1.2 3.1 0 4.42-2.7 5.39-5.27 5.68.41.36.79 1.07.79 2.16v3.2c0 .31.21.67.8.56C20.21 21.37 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z" />
+                </svg></span>
+              <input id="profileGitHub" type="url" placeholder="https://github.com/your-handle" class="pf-in"
+                style="flex:1">
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="pf-ico" style="background:rgba(236,72,153,0.18);color:#ec4899">🌐</span>
+              <input id="profilePortfolio" type="url" placeholder="https://your-portfolio.com" class="pf-in"
+                style="flex:1">
+            </div>
+          </div>
+        </div>
+
+        <!-- account meta -->
+        <div
+          style="margin-top:18px;padding-top:16px;border-top:1px dashed rgba(148,163,184,0.28);display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:0.82rem">
+          <div>
+            <div class="pf-lbl">Member since</div>
+            <div id="profileMemberSince" style="font-weight:700;color:var(--text-1,#f0f2fa)">—</div>
+          </div>
+          <div>
+            <div class="pf-lbl">Student ID</div>
+            <div id="profileUid"
+              style="font-family:var(--mono);font-size:11px;color:var(--text-2,rgba(255,255,255,0.7));word-break:break-all">
+              —</div>
+          </div>
+        </div>
+
+        <p id="profileStatusMsg" style="font-size:0.82rem;margin:14px 0 0;min-height:18px"></p>
+      </div>
+
+      <!-- sticky footer -->
+      <div
+        style="display:flex;justify-content:flex-end;gap:8px;padding:14px 28px;border-top:1px solid rgba(148,163,184,0.2);background:transparent">
+        <button type="button" class="btn btn-ghost" id="cancelProfileBtn">Cancel</button>
+        <button type="button" class="btn btn-primary" id="saveProfileBtn">Save Profile</button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    /* Profile modal styles — scoped to .profile-modal */
+    .profile-modal .pf-lbl {
+      display: block;
+      font-size: 0.74rem;
+      font-weight: 700;
+      opacity: 0.7;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .profile-modal .pf-in {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.04);
+      color: inherit;
+      font-size: 0.9rem;
+      font-family: inherit;
+      transition: border-color 200ms, background 200ms, box-shadow 200ms;
+    }
+
+    .profile-modal .pf-in:focus {
+      outline: 0;
+      border-color: rgba(124, 107, 255, 0.5);
+      background: rgba(255, 255, 255, 0.06);
+      box-shadow: 0 0 0 3px rgba(124, 107, 255, 0.14);
+    }
+
+    .profile-modal .pf-sec {
+      margin: 0 0 10px;
+      font-size: 0.84rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .profile-modal .pf-ico {
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      display: grid;
+      place-items: center;
+      font-weight: 900;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+
+    .profile-modal .skill-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: rgba(124, 107, 255, 0.14);
+      color: #c4b5fd;
+      border: 1px solid rgba(124, 107, 255, 0.28);
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: default;
+    }
+
+    .profile-modal .skill-chip button {
+      background: none;
+      border: 0;
+      color: inherit;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      opacity: 0.6;
+      padding: 0;
+    }
+
+    .profile-modal .skill-chip button:hover {
+      opacity: 1;
+    }
+
+    /* Switch thumb */
+    .profile-modal #profileAvailability::before {
+      content: "";
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      background: #f59e0b;
+      top: 3px;
+      left: 3px;
+      transition: transform 200ms, background 200ms;
+    }
+
+    .profile-modal #profileAvailability {
+      position: relative;
+    }
+
+    .profile-modal #profileAvailability:checked {
+      background: rgba(34, 197, 94, 0.35);
+    }
+
+    .profile-modal #profileAvailability:checked::before {
+      transform: translateX(16px);
+      background: #22c55e;
+    }
+
+    body.theme-light .profile-modal .pf-in {
+      background: rgba(0, 0, 0, 0.03);
+      border-color: rgba(0, 0, 0, 0.1);
+    }
+
+    body.theme-light .profile-modal .pf-in:focus {
+      background: #fff;
+      border-color: rgba(124, 107, 255, 0.5);
+    }
+
+    /* Skill chip palette is tuned for dark theme (#c4b5fd on pale-purple
      bg). On white that's ~2:1 contrast — force a deeper violet + a
      slightly stronger border for readability. */
-  body.theme-light .profile-modal .skill-chip {
-    color: #6d28d9;
-    background: rgba(124,107,255,0.1);
-    border-color: rgba(124,107,255,0.3);
-  }
-</style>
+    body.theme-light .profile-modal .skill-chip {
+      color: #6d28d9;
+      background: rgba(124, 107, 255, 0.1);
+      border-color: rgba(124, 107, 255, 0.3);
+    }
+  </style>
 
- <!-- tars -->
-    <button class="tars-orb" id="tarsOrb" type="button" aria-label="Ask TARS">
-      <img loading="lazy" decoding="async" class="tars-orb-img" src="assets/images/icons8-ai-64.png" alt="" aria-hidden="true">
-      <span class="tars-orb-label">TARS</span>
-    </button>
+  <!-- tars -->
+  <button class="tars-orb" id="tarsOrb" type="button" aria-label="Ask TARS">
+    <img loading="lazy" decoding="async" class="tars-orb-img" src="assets/images/icons8-ai-64.png" alt=""
+      aria-hidden="true">
+    <span class="tars-orb-label">TARS</span>
+  </button>
 
-    <div id="tarsModal" class="tars-chat-modal" role="dialog" aria-labelledby="tarsChatTitle" aria-modal="true">
-      <div class="tars-chat-card">
-        <div class="tars-chat-header">
-          <div class="tars-chat-avatar">
-            <img loading="lazy" decoding="async" class="tars-chat-avatar-img" src="assets/images/icons8-ai-64.png" alt="" aria-hidden="true">
-          </div>
-          <div class="tars-chat-id">
-            <div class="tars-chat-kicker">InternSphere Assistant</div>
-            <h3 id="tarsChatTitle">TARS</h3>
-          </div>
-          <button type="button" class="tars-chat-close" id="tarsChatClose" aria-label="Close">✕</button>
+  <div id="tarsModal" class="tars-chat-modal" role="dialog" aria-labelledby="tarsChatTitle" aria-modal="true">
+    <div class="tars-chat-card">
+      <div class="tars-chat-header">
+        <div class="tars-chat-avatar">
+          <img loading="lazy" decoding="async" class="tars-chat-avatar-img" src="assets/images/icons8-ai-64.png" alt=""
+            aria-hidden="true">
         </div>
-
-        <div class="tars-chat-thread" id="tarsChatThread">
-          <div class="tars-chat-msg tars-chat-msg-bot">
-            Hi! I'm TARS — your InternSphere assistant. Pick a topic below or write your own message.
-          </div>
+        <div class="tars-chat-id">
+          <div class="tars-chat-kicker">InternSphere Assistant</div>
+          <h3 id="tarsChatTitle">TARS</h3>
         </div>
-
-        <!-- topic dropdown -->
-        <div class="tars-suggest is-hidden" id="tarsSuggest">
-          <div class="tars-suggest-title">
-            <span class="tars-suggest-spark">✦</span>
-            Popular topics
-          </div>
-          <button type="button" class="tars-suggest-item" data-prompt="What is an ATS score and how is it calculated?">
-            <span class="tars-suggest-ico">📊</span> What is an ATS score?
-          </button>
-          <button type="button" class="tars-suggest-item" data-prompt="How can I improve my ATS score? Give me concrete, specific steps.">
-            <span class="tars-suggest-ico">📈</span> How to improve my ATS score?
-          </button>
-          <button type="button" class="tars-suggest-item" data-prompt="Does the ATS score really matter for internship applications? Be honest.">
-            <span class="tars-suggest-ico">🤔</span> Does ATS really matter?
-          </button>
-          <button type="button" class="tars-suggest-item" data-prompt="Walk me through what happens step-by-step from when I click Apply to when a company decides. What should I expect at each stage?">
-            <span class="tars-suggest-ico">🚀</span> What happens when I apply?
-          </button>
-          <button type="button" class="tars-suggest-item" data-prompt="What should I do immediately after my application is approved? Give me the first 3 concrete actions.">
-            <span class="tars-suggest-ico">✅</span> My application was approved — what's next?
-          </button>
-          <button type="button" class="tars-suggest-item" data-prompt="I was shortlisted and have an interview scheduled. How should I prepare? Specific prep steps for a student intern interview.">
-            <span class="tars-suggest-ico">🎤</span> How to prepare for the interview?
-          </button>
-          <button type="button" class="tars-suggest-item" data-prompt="What is the Virtual Workroom on InternSphere? Walk me through what it does, what the three columns contain, and when I'd use it during my internship.">
-            <span class="tars-suggest-ico">💼</span> What's the Virtual Workroom?
-          </button>
-          <button type="button" class="tars-suggest-item" data-prompt="Where do I see my assigned tasks and how do I submit them?">
-            <span class="tars-suggest-ico">📋</span> Where are my tasks?
-          </button>
-          <button type="button" class="tars-suggest-item" data-prompt="How do I see feedback from my company on my task submissions?">
-            <span class="tars-suggest-ico">💬</span> How do I see feedback?
-          </button>
-          <button type="button" class="tars-suggest-item" data-prompt="What makes a strong internship CV for a student with limited experience? Give me concrete, specific advice.">
-            <span class="tars-suggest-ico">📄</span> What makes a good CV?
-          </button>
-          <button type="button" class="tars-suggest-item tars-suggest-custom" id="tarsCustomBtn">
-            <span class="tars-suggest-ico">✎</span> Custom message
-          </button>
-        </div>
-
-        <form class="tars-chat-input-row" id="tarsChatForm">
-          <input id="tarsChatInput" type="text" placeholder="Ask TARS anything…" autocomplete="off">
-          <button type="submit" class="tars-chat-send" aria-label="Send">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-          </button>
-        </form>
+        <button type="button" class="tars-chat-close" id="tarsChatClose" aria-label="Close">✕</button>
       </div>
-    </div>
 
-    <!-- search modal -->
-    <div class="ai-search-modal" id="aiSearchModal" role="dialog" aria-label="Find internships">
-      <div class="ai-search-card">
-        <div class="ai-search-input-wrap">
-          <svg class="ai-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
-          <input class="ai-search-input" id="aiSearchInput" type="text" placeholder="Search internships by title, skill, company…" autocomplete="off" />
-          <button style="background:transparent;border:0;color:inherit;cursor:pointer;opacity:0.6;font-size:20px" id="aiSearchClose" type="button" aria-label="Close">&times;</button>
-        </div>
-        <div class="ai-search-results" id="aiSearchResults">
-          <p style="padding:24px;text-align:center;color:rgba(255,255,255,0.55)">Start typing to search, or pick one below…</p>
-        </div>
-        <div class="ai-search-hint">
-          <span><kbd>↑↓</kbd> navigate</span>
-          <span><kbd>Enter</kbd> open</span>
-          <span><kbd>Esc</kbd> close</span>
+      <div class="tars-chat-thread" id="tarsChatThread">
+        <div class="tars-chat-msg tars-chat-msg-bot">
+          Hi! I'm TARS — your InternSphere assistant. Pick a topic below or write your own message.
         </div>
       </div>
-    </div>
 
-    <!-- scripts -->
-    <script type="module" src="js/dashboard.js"></script>
-    <script type="module" src="js/ai-search.js"></script>
-    <script type="module" src="js/student-activity.js"></script>
-    <script type="module" src="js/resume-analyzer.js"></script>
-    <script type="module" src="js/tars.js"></script>
-    <script src="js/theme.js"></script>
-    <script src="js/ui-dynamic.js"></script>
-    <script src="js/footer.js"></script>
-    <script src="js/modal-scroll-lock.js"></script>
-    <script src="js/offer-letter.js"></script>
+      <!-- topic dropdown -->
+      <div class="tars-suggest is-hidden" id="tarsSuggest">
+        <div class="tars-suggest-title">
+          <span class="tars-suggest-spark">✦</span>
+          Popular topics
+        </div>
+        <button type="button" class="tars-suggest-item" data-prompt="What is an ATS score and how is it calculated?">
+          <span class="tars-suggest-ico">📊</span> What is an ATS score?
+        </button>
+        <button type="button" class="tars-suggest-item"
+          data-prompt="How can I improve my ATS score? Give me concrete, specific steps.">
+          <span class="tars-suggest-ico">📈</span> How to improve my ATS score?
+        </button>
+        <button type="button" class="tars-suggest-item"
+          data-prompt="Does the ATS score really matter for internship applications? Be honest.">
+          <span class="tars-suggest-ico">🤔</span> Does ATS really matter?
+        </button>
+        <button type="button" class="tars-suggest-item"
+          data-prompt="Walk me through what happens step-by-step from when I click Apply to when a company decides. What should I expect at each stage?">
+          <span class="tars-suggest-ico">🚀</span> What happens when I apply?
+        </button>
+        <button type="button" class="tars-suggest-item"
+          data-prompt="What should I do immediately after my application is approved? Give me the first 3 concrete actions.">
+          <span class="tars-suggest-ico">✅</span> My application was approved — what's next?
+        </button>
+        <button type="button" class="tars-suggest-item"
+          data-prompt="I was shortlisted and have an interview scheduled. How should I prepare? Specific prep steps for a student intern interview.">
+          <span class="tars-suggest-ico">🎤</span> How to prepare for the interview?
+        </button>
+        <button type="button" class="tars-suggest-item"
+          data-prompt="What is the Virtual Workroom on InternSphere? Walk me through what it does, what the three columns contain, and when I'd use it during my internship.">
+          <span class="tars-suggest-ico">💼</span> What's the Virtual Workroom?
+        </button>
+        <button type="button" class="tars-suggest-item"
+          data-prompt="Where do I see my assigned tasks and how do I submit them?">
+          <span class="tars-suggest-ico">📋</span> Where are my tasks?
+        </button>
+        <button type="button" class="tars-suggest-item"
+          data-prompt="How do I see feedback from my company on my task submissions?">
+          <span class="tars-suggest-ico">💬</span> How do I see feedback?
+        </button>
+        <button type="button" class="tars-suggest-item"
+          data-prompt="What makes a strong internship CV for a student with limited experience? Give me concrete, specific advice.">
+          <span class="tars-suggest-ico">📄</span> What makes a good CV?
+        </button>
+        <button type="button" class="tars-suggest-item tars-suggest-custom" id="tarsCustomBtn">
+          <span class="tars-suggest-ico">✎</span> Custom message
+        </button>
+      </div>
+
+      <form class="tars-chat-input-row" id="tarsChatForm">
+        <input id="tarsChatInput" type="text" placeholder="Ask TARS anything…" autocomplete="off">
+        <button type="submit" class="tars-chat-send" aria-label="Send">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- search modal -->
+  <div class="ai-search-modal" id="aiSearchModal" role="dialog" aria-label="Find internships">
+    <div class="ai-search-card">
+      <div class="ai-search-input-wrap">
+        <svg class="ai-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round">
+          <circle cx="11" cy="11" r="7" />
+          <path d="M21 21l-4.35-4.35" />
+        </svg>
+        <input class="ai-search-input" id="aiSearchInput" type="text"
+          placeholder="Search internships by title, skill, company…" autocomplete="off" />
+        <button style="background:transparent;border:0;color:inherit;cursor:pointer;opacity:0.6;font-size:20px"
+          id="aiSearchClose" type="button" aria-label="Close">&times;</button>
+      </div>
+      <div class="ai-search-results" id="aiSearchResults">
+        <p style="padding:24px;text-align:center;color:rgba(255,255,255,0.55)">Start typing to search, or pick one
+          below…</p>
+      </div>
+      <div class="ai-search-hint">
+        <span><kbd>↑↓</kbd> navigate</span>
+        <span><kbd>Enter</kbd> open</span>
+        <span><kbd>Esc</kbd> close</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- scripts -->
+  <script type="module" src="js/guest-mode.js"></script>
+  <script type="module" src="js/dashboard.js"></script>
+  <script type="module" src="js/ai-search.js"></script>
+  <script type="module" src="js/student-activity.js"></script>
+  <script type="module" src="js/resume-analyzer.js"></script>
+  <script type="module" src="js/tars.js"></script>
+  <script src="js/theme.js"></script>
+  <script src="js/ui-dynamic.js"></script>
+  <script src="js/footer.js"></script>
+  <script src="js/modal-scroll-lock.js"></script>
+  <script src="js/sounds.js"></script>
+  <script src="js/offer-letter.js"></script>
+  <script src="js/certificate.js"></script>
 </body>
 
 </html>

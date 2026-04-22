@@ -707,15 +707,31 @@
         var role = btn.getAttribute("data-guest-role");
         if (role !== "student" && role !== "company") return;
         try { sessionStorage.setItem("guestRole", role); } catch (_) {}
+        const authMod = await import(
+          "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js"
+        );
+        let auth;
         try {
-          const { auth } = await import("./firebase/firebase.js");
+          ({ auth } = await import("./firebase/firebase.js"));
           if (auth.currentUser && !auth.currentUser.isAnonymous) {
-            const { signOut } = await import(
-              "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js"
-            );
-            await signOut(auth);
+            await authMod.signOut(auth);
           }
         } catch (err) { console.warn("guest signout:", err); }
+        // Sign in anonymously BEFORE navigating so a Firebase-side failure
+        // (unauthorized domain on a fresh deployment, anonymous provider
+        // disabled) is visible here instead of silently breaking the dashboard.
+        try {
+          await authMod.signInAnonymously(auth);
+        } catch (err) {
+          try { sessionStorage.removeItem("guestRole"); } catch (_) {}
+          var msg = err && err.code === "auth/unauthorized-domain"
+            ? "Guest mode unavailable — this domain isn't authorized in Firebase (Authentication → Settings → Authorized domains)."
+            : err && (err.code === "auth/admin-restricted-operation" || err.code === "auth/operation-not-allowed")
+              ? "Guest mode unavailable — anonymous sign-in is disabled in Firebase (Authentication → Sign-in method)."
+              : "Guest mode unavailable — " + ((err && (err.code || err.message)) || "unknown error");
+          alert(msg);
+          return;
+        }
         window.location.href = role === "company"
           ? "dashboard-company.html"
           : "dashboard.html";

@@ -33,7 +33,7 @@ onAuthStateChanged(auth, async (user) => {
 // happens to still be authenticated, then navigate to the matching dashboard.
 // The guest module (loaded on the destination page) picks up the flag, signs
 // in anonymously, and installs its interceptor + pill.
-import { signOut } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
+import { signOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 
 document.addEventListener("click", async (e) => {
   const btn = e.target instanceof Element ? e.target.closest(".guest-try") : null;
@@ -47,6 +47,21 @@ document.addEventListener("click", async (e) => {
       await signOut(auth);
     }
   } catch (err) { console.warn("guest signout:", err); }
+  // Do the anonymous sign-in BEFORE navigating so a Firebase-side failure
+  // (unauthorized domain on a fresh deployment, anonymous provider disabled)
+  // shows on the login page instead of silently breaking the dashboard.
+  try {
+    await signInAnonymously(auth);
+  } catch (err) {
+    try { sessionStorage.removeItem("guestRole"); } catch {}
+    const msg = err?.code === "auth/unauthorized-domain"
+      ? "Guest mode unavailable — this domain isn't authorized in Firebase (Authentication → Settings → Authorized domains)."
+      : err?.code === "auth/admin-restricted-operation" || err?.code === "auth/operation-not-allowed"
+        ? "Guest mode unavailable — anonymous sign-in is disabled in Firebase (Authentication → Sign-in method)."
+        : "Guest mode unavailable — " + (err?.code || err?.message || "unknown error");
+    showAuthMsg(msg, "error");
+    return;
+  }
   const dest = role === "company" ? "dashboard-company.html" : "dashboard.html";
   window.location.href = "./" + dest;
 });

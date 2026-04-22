@@ -247,7 +247,18 @@ function ensureAnonAuth() {
       return;
     }
     if (!user) {
-      signInAnonymously(auth).catch((e) => console.warn("[guest] anon sign-in failed:", e));
+      signInAnonymously(auth).catch((e) => {
+        console.warn("[guest] anon sign-in failed:", e);
+        // Surface the failure so silent breakage (e.g. missing authorized
+        // domain on a new deployment, anonymous provider disabled) is
+        // visible in the UI instead of only in the console.
+        const hint = e?.code === "auth/unauthorized-domain"
+          ? "This domain isn't authorized in Firebase. Add it in Authentication → Settings → Authorized domains."
+          : e?.code === "auth/admin-restricted-operation" || e?.code === "auth/operation-not-allowed"
+            ? "Anonymous sign-in is disabled in Firebase. Enable it in Authentication → Sign-in method."
+            : (e?.code || e?.message || "unknown error");
+        showGuestToast("Guest sign-in failed — " + hint);
+      });
     }
   });
 }

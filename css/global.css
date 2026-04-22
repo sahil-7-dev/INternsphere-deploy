@@ -420,6 +420,151 @@ body.theme-light .grid {
   flex-wrap: wrap;
 }
 
+/* ═══ Hero guest preview cards ═══ */
+.hero-try {
+  margin-top: 22px;
+}
+.hero-try__kicker {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text) 60%, transparent);
+  margin: 0 0 12px;
+}
+.hero-try__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  max-width: 560px;
+}
+.hero-try__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 16px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(124, 107, 255, 0.32);
+  background: linear-gradient(160deg, rgba(124, 107, 255, 0.1), rgba(124, 107, 255, 0.03));
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+.hero-try__card:hover {
+  border-color: rgba(124, 107, 255, 0.75);
+  background: linear-gradient(160deg, rgba(124, 107, 255, 0.18), rgba(124, 107, 255, 0.06));
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(124, 107, 255, 0.22);
+}
+.hero-try__card--company {
+  border-color: rgba(236, 72, 153, 0.32);
+  background: linear-gradient(160deg, rgba(236, 72, 153, 0.08), rgba(236, 72, 153, 0.02));
+}
+.hero-try__card--company:hover {
+  border-color: rgba(236, 72, 153, 0.75);
+  background: linear-gradient(160deg, rgba(236, 72, 153, 0.16), rgba(236, 72, 153, 0.04));
+  box-shadow: 0 14px 32px rgba(236, 72, 153, 0.22);
+}
+.hero-try__badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(124, 107, 255, 0.2);
+  color: #c9bfff;
+  font: 700 0.62rem/1 system-ui, sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.hero-try__card--company .hero-try__badge {
+  background: rgba(236, 72, 153, 0.22);
+  color: #fbb4d6;
+}
+.hero-try__ico {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(124, 107, 255, 0.16);
+  color: #b8a8ff;
+  margin-bottom: 2px;
+}
+.hero-try__ico svg { width: 22px; height: 22px; }
+.hero-try__card--company .hero-try__ico {
+  background: rgba(236, 72, 153, 0.14);
+  color: #f4a8cf;
+}
+.hero-try__title {
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: inherit;
+}
+.hero-try__sub {
+  font-size: 0.82rem;
+  opacity: 0.68;
+  line-height: 1.4;
+}
+
+@media (max-width: 560px) {
+  .hero-try__grid { grid-template-columns: 1fr; }
+}
+
+/* Light-theme overrides — the dark-tinted text/icon colors above wash out
+   on white backgrounds. */
+body.theme-light .hero-try__card,
+body.light .hero-try__card {
+  color: #0f172a;
+  border-color: rgba(124, 107, 255, 0.45);
+  background: linear-gradient(160deg, rgba(124, 107, 255, 0.10), rgba(124, 107, 255, 0.02));
+}
+body.theme-light .hero-try__card:hover,
+body.light .hero-try__card:hover {
+  border-color: rgba(124, 107, 255, 0.85);
+  background: linear-gradient(160deg, rgba(124, 107, 255, 0.18), rgba(124, 107, 255, 0.05));
+}
+body.theme-light .hero-try__card--company,
+body.light .hero-try__card--company {
+  border-color: rgba(236, 72, 153, 0.45);
+  background: linear-gradient(160deg, rgba(236, 72, 153, 0.08), rgba(236, 72, 153, 0.02));
+}
+body.theme-light .hero-try__card--company:hover,
+body.light .hero-try__card--company:hover {
+  border-color: rgba(236, 72, 153, 0.85);
+  background: linear-gradient(160deg, rgba(236, 72, 153, 0.18), rgba(236, 72, 153, 0.05));
+}
+body.theme-light .hero-try__badge,
+body.light .hero-try__badge {
+  background: rgba(124, 107, 255, 0.16);
+  color: #6d28d9;
+}
+body.theme-light .hero-try__card--company .hero-try__badge,
+body.light .hero-try__card--company .hero-try__badge {
+  background: rgba(236, 72, 153, 0.16);
+  color: #be185d;
+}
+body.theme-light .hero-try__ico,
+body.light .hero-try__ico {
+  background: rgba(124, 107, 255, 0.14);
+  color: #7c3aed;
+}
+body.theme-light .hero-try__card--company .hero-try__ico,
+body.light .hero-try__card--company .hero-try__ico {
+  background: rgba(236, 72, 153, 0.12);
+  color: #db2777;
+}
+body.theme-light .hero-try__title,
+body.light .hero-try__title { color: #0f172a; }
+body.theme-light .hero-try__sub,
+body.light .hero-try__sub { color: rgba(15, 23, 42, 0.65); opacity: 1; }
+body.theme-light .hero-try__kicker,
+body.light .hero-try__kicker { color: rgba(15, 23, 42, 0.55); }
+
 .hero-badges {
   margin-top: 14px;
   display: flex;

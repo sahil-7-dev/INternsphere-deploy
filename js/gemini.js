@@ -5,7 +5,7 @@
 // client JS. To point at a different proxy (e.g. local dev), set
 // window.GEMINI_PROXY_URL before this module loads.
 
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-2.5-flash-preview-04-17";
 
 const PROXY_URL =
   (typeof window !== "undefined" && window.GEMINI_PROXY_URL) || "/api/gemini";

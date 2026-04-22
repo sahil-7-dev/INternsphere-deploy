@@ -13,6 +13,13 @@ import { roleHome } from "./lib/role-home.js";
 
 onAuthStateChanged(auth, async (user) => {
   if (!user) return;
+  // Anonymous users came from the guest card — don't auto-redirect them.
+  // (The card click already navigated.) The guest-mode module owns their UI.
+  if (user.isAnonymous) return;
+  // Real user signed in — ALWAYS clear any leftover guest flag so the pill,
+  // welcome modal, and interceptor don't bleed into their real session.
+  try { sessionStorage.removeItem("guestRole"); } catch {}
+  try { sessionStorage.removeItem("guestGreetingShown"); } catch {}
   try {
     const role = await getUserRole(user.uid);
     const params = new URLSearchParams(location.search);
@@ -20,6 +27,28 @@ onAuthStateChanged(auth, async (user) => {
     const safeNext = next && /^\/?[\w\-./?=&%]+$/.test(next) ? next : "";
     window.location.href = safeNext ? safeNext : "./" + roleHome(role);
   } catch (_) { }
+});
+
+// Guest card handling — set the session role, sign out any real user that
+// happens to still be authenticated, then navigate to the matching dashboard.
+// The guest module (loaded on the destination page) picks up the flag, signs
+// in anonymously, and installs its interceptor + pill.
+import { signOut } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
+
+document.addEventListener("click", async (e) => {
+  const btn = e.target instanceof Element ? e.target.closest(".guest-try") : null;
+  if (!btn) return;
+  e.preventDefault();
+  const role = btn.getAttribute("data-guest-role");
+  if (role !== "student" && role !== "company") return;
+  try { sessionStorage.setItem("guestRole", role); } catch {}
+  try {
+    if (auth.currentUser && !auth.currentUser.isAnonymous) {
+      await signOut(auth);
+    }
+  } catch (err) { console.warn("guest signout:", err); }
+  const dest = role === "company" ? "dashboard-company.html" : "dashboard.html";
+  window.location.href = "./" + dest;
 });
 
 import { friendlyAuthError } from "./lib/auth-errors.js";

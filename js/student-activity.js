@@ -49,7 +49,7 @@ function renderWelcomeBanner() {
 
   if (kicker) kicker.textContent = greetingForTime();
   if (to) to.textContent = "Welcome back,";
-  nameEl.textContent = firstName ? firstName : "there";
+  nameEl.textContent = firstName || "there";
 
   // Contextual subtitle
   let subLine = "Here's your snapshot for today.";
@@ -350,38 +350,136 @@ function wireProfilePicPicker() {
 }
 
 // Approved internship + tasks + feedback
-async function loadApprovedInternship(uid) {
+// Uses onSnapshot so downstream UI (certificates section) stays live when
+// the company flips offerLetterIssued / certificateIssued.
+let _approvedAppSubbed = false;
+function loadApprovedInternship(uid) {
   const q = query(
     collection(db, "applications"),
     where("studentId", "==", uid),
     where("status", "==", "Approved"),
   );
-  const snap = await getDocs(q);
-  if (snap.empty) {
-    state.approvedApp = null;
-    state.internship = null;
-    showLockedState();
-    renderTasks([]);
-    return;
-  }
+  return new Promise((resolve) => {
+    onSnapshot(q, async (snap) => {
+      if (snap.empty) {
+        state.approvedApp = null;
+        state.internship = null;
+        showLockedState();
+        renderTasks([]);
+        renderCertificates();
+        resolve();
+        return;
+      }
 
-  const app = { id: snap.docs[0].id, ...snap.docs[0].data() };
-  state.approvedApp = app;
+      const app = { id: snap.docs[0].id, ...snap.docs[0].data() };
+      state.approvedApp = app;
 
-  state.internship = { id: app.internshipId };
-  subscribeToTasks();
-  subscribeToMySubmissions();
+      if (!_approvedAppSubbed) {
+        _approvedAppSubbed = true;
+        state.internship = { id: app.internshipId };
+        subscribeToTasks();
+        subscribeToMySubmissions();
 
-  try {
-    const intSnap = await getDoc(doc(db, "internships", app.internshipId));
-    if (intSnap.exists()) {
-      state.internship = { id: intSnap.id, ...intSnap.data() };
+        try {
+          const intSnap = await getDoc(doc(db, "internships", app.internshipId));
+          if (intSnap.exists()) {
+            state.internship = { id: intSnap.id, ...intSnap.data() };
+          }
+        } catch (e) {
+          console.error("load internship:", e);
+        }
+      }
+
+      showUnlockedState();
+      renderCertificates();
+      resolve();
+    }, (err) => {
+      console.error("approved app subscription:", err);
+      resolve();
+    });
+  });
+}
+
+function renderCertificates() {
+  const section = document.getElementById("certificatesSection");
+  if (!section) return;
+  const app = state.approvedApp;
+  if (!app) { section.style.display = "none"; return; }
+  section.style.display = "";
+
+  const internship = state.internship || {};
+  const studentName = (state.studentDoc?.name || "").trim() ||
+    (auth.currentUser?.displayName || "").split(/\s+/)[0] || "Intern";
+  const companyName = internship.companyName || "";
+  const internshipTitle = internship.title || app.role || "Virtual Internship";
+
+  // ── Offer letter tile ──
+  const offerTile   = document.getElementById("certOfferTile");
+  const offerStatus = document.getElementById("certOfferStatus");
+  const offerBtn    = document.getElementById("certOfferBtn");
+  const offerIssued = app.offerLetterIssued === true;
+
+  if (offerIssued) {
+    offerTile.dataset.state = "ready";
+    if (offerStatus) offerStatus.textContent = "Signed and ready to download.";
+    if (offerBtn) {
+      offerBtn.disabled = false;
+      offerBtn.innerHTML = "<span>⬇</span><span>Download</span>";
+      offerBtn.onclick = () => {
+        const extras = {
+          duration: internship.duration || internship.durationKey || "",
+          location: internship.location || "",
+          stipend:  internship.stipend  || "",
+        };
+        window.downloadOfferLetter?.({
+          studentName,
+          company: companyName,
+          role: internshipTitle,
+          startDate: app.appliedAt || "",
+          ...extras,
+        });
+      };
     }
-  } catch (e) {
-    console.error("load internship:", e);
+  } else {
+    offerTile.dataset.state = "locked";
+    if (offerStatus) offerStatus.textContent = "Locked — your company will issue this soon.";
+    if (offerBtn) {
+      offerBtn.disabled = true;
+      offerBtn.innerHTML = '<span class="cert-tile__lock">🔒</span><span>Locked</span>';
+      offerBtn.onclick = null;
+    }
   }
 
-  showUnlockedState();
+  // ── Completion certificate tile ──
+  const compTile   = document.getElementById("certCompletionTile");
+  const compStatus = document.getElementById("certCompletionStatus");
+  const compBtn    = document.getElementById("certCompletionBtn");
+  const certIssued = app.certificateIssued === true;
+
+  if (certIssued) {
+    compTile.dataset.state = "ready";
+    if (compStatus) compStatus.textContent = "Certificate approved and ready to download.";
+    if (compBtn) {
+      compBtn.disabled = false;
+      compBtn.innerHTML = "<span>⬇</span><span>Download</span>";
+      compBtn.onclick = () => {
+        window.downloadCompletionCertificate?.({
+          studentName,
+          internshipTitle,
+          internshipCompany: companyName,
+          buttonEl: compBtn,
+        });
+      };
+    }
+  } else {
+    compTile.dataset.state = "locked";
+    if (compStatus) compStatus.textContent = "Finish your tasks — your company will approve this.";
+    if (compBtn) {
+      compBtn.disabled = true;
+      compBtn.innerHTML = '<span class="cert-tile__lock">🔒</span><span>Locked</span>';
+      compBtn.onclick = null;
+    }
+  }
 }
 
 function showLockedState() {
@@ -409,7 +507,37 @@ function showUnlockedState() {
   if (i.location) subParts.push(i.location);
   $("internshipTitleLbl").textContent = subParts.filter(Boolean).join(" · ");
 
-  $("companyAvatar").textContent = (name || "?").slice(0, 2).toUpperCase();
+  paintCompanyAvatar(name, i.companyId || state.approvedApp?.companyId);
+}
+
+async function paintCompanyAvatar(name, companyId) {
+  const el = $("companyAvatar");
+  if (!el) return;
+
+  const initials = (name || "?").slice(0, 2).toUpperCase();
+  el.textContent = initials;
+  el.style.backgroundImage = "";
+
+  if (!companyId) return;
+  try {
+    const snap = await getDoc(doc(db, "companies", companyId));
+    if (!snap.exists()) return;
+    const logo = (snap.data().logo || "").trim();
+    if (!logo) return;
+
+    const img = new Image();
+    img.onload = () => {
+      el.textContent = "";
+      el.style.backgroundImage = `url("${logo.replace(/"/g, '\\"')}")`;
+      el.style.backgroundSize = "cover";
+      el.style.backgroundPosition = "center";
+      el.style.backgroundRepeat = "no-repeat";
+    };
+    img.onerror = () => { /* keep initials on failure */ };
+    img.src = logo;
+  } catch (e) {
+    console.warn("[feedback] company logo fetch failed:", e);
+  }
 }
 
 function subscribeToTasks() {
@@ -553,62 +681,9 @@ function renderTasks(tasks) {
     }
   }
 
-  const doneCount = tasks.filter((t) => {
-    const s = state.submissions[t.id];
-    return s && s.feedback?.status !== "rejected";
-  }).length;
-
-  const kpis = document.querySelectorAll(".kpi");
-
-  const taskKpi = kpis[1]?.querySelector(".kpi-val");
-  const taskSub = kpis[1]?.querySelector(".kpi-sub");
-  if (!state.approvedApp) {
-    if (taskKpi) taskKpi.textContent = "—";
-    if (taskSub) taskSub.textContent = "Join an internship to see tasks";
-  } else if (tasks.length === 0) {
-    if (taskKpi) taskKpi.textContent = "0";
-    if (taskSub) taskSub.textContent = "Your company hasn't added tasks yet";
-  } else {
-    if (taskKpi) taskKpi.textContent = String(tasks.length);
-    if (taskSub) taskSub.textContent = `${doneCount}/${tasks.length} submitted`;
-  }
-
-  const progKpi = kpis[2]?.querySelector(".kpi-val");
-  const progSub = kpis[2]?.querySelector(".kpi-sub");
-  if (!state.approvedApp) {
-    if (progKpi) progKpi.textContent = "—";
-    if (progSub) progSub.textContent = "Join an internship to track progress";
-  } else {
-    const pct = tasks.length === 0 ? 0 : Math.round((doneCount / tasks.length) * 100);
-    if (progKpi) progKpi.textContent = pct + "%";
-    if (progSub) {
-      const duration = state.internship?.duration;
-      progSub.textContent = duration ? `Internship · ${duration}` : "Active internship";
-    }
-  }
-
-  const roleKpi = kpis[3]?.querySelector(".kpi-val");
-  const roleTag = kpis[3]?.querySelector(".kpi-tag");
-  const roleSub = kpis[3]?.querySelector(".kpi-sub");
-  if (roleTag) roleTag.textContent = "Active Role";
-  if (state.internship) {
-    if (roleKpi) {
-      const title = state.internship.title || "—";
-      roleKpi.style.fontSize = title.length > 14 ? "1.15rem" : "";
-      roleKpi.textContent = title;
-    }
-    if (roleSub) {
-      roleSub.textContent = state.internship.companyName || "Company";
-    }
-  } else {
-    if (roleKpi) {
-      roleKpi.style.fontSize = "";
-      roleKpi.textContent = "—";
-    }
-    if (roleSub) {
-      roleSub.textContent = "Join an internship to see your role";
-    }
-  }
+  // Tasks / Progress / Active Role KPIs are owned by dashboard.js::loadKPIs()
+  // which handles multi-internship. Writing them here would overwrite those
+  // values every time a task/submission updates.
 
   renderWelcomeBanner();
   renderActivityFeed();

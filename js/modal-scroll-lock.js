@@ -3,6 +3,7 @@
 (function () {
   const MODAL_SELECTORS = [
     ".modal",
+    ".modal-backdrop",
     ".completion-modal",
     ".admin-modal",
     ".cp-modal",
@@ -10,6 +11,8 @@
     ".onboarding-modal",
     ".submissions-modal",
     ".tars-chat-modal",
+    ".sl-modal",
+    ".guest-modal-backdrop",
     "#settingsModal",
     "[role='dialog']:not([hidden])",
   ];
@@ -43,6 +46,8 @@
       ".modal-content", ".modal-box", ".completion-card",
       ".admin-modal__card", ".cp-card", ".profile-card",
       ".onboarding-modal .onb-card", ".tars-chat-card",
+      ".modal-card", ".settings-body", ".sl-modal-card",
+      ".guest-modal", ".ghost-modal",
       ".modal-scroll",
       '[style*="overflow-y:auto"]', '[style*="overflow-y: auto"]',
       '[style*="overflow:auto"]',   '[style*="overflow: auto"]',

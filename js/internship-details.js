@@ -495,6 +495,7 @@ if (applyForm) {
         applicantNote,
         status: "Pending",
         appliedAt: new Date().toLocaleString(),
+        appliedAtMs: Date.now(),
       });
 
       applyForm.reset();
@@ -502,6 +503,7 @@ if (applyForm) {
       if (cvSub) cvSub.textContent = "PDF up to 5 MB";
       uploadBox?.classList.remove("has-file");
 
+      if (typeof window.playSubmitChime === "function") window.playSubmitChime();
       openApplySuccessModal();
     } catch (err) {
       console.error(err);

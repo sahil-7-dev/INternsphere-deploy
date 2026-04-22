@@ -30,15 +30,29 @@ import { rebuildUserSkillSet as _rebuildUserSkillSet, computeMatch as _computeMa
   from "./lib/match.js";
 
 let userSkillSet = new Set();
+// Generic CV-relevance score from resumeAnalysis.skillsMatch (0-100).
+// Used as a fallback when we can't compute a precise per-internship match
+// (e.g. the internship lists no skills, or the student has manual skills
+// only and they don't intersect this particular role).
+let resumeSkillsMatch = null;
 
 let userTouchedSort = false;
 
 function rebuildUserSkillSet(studentData) {
   userSkillSet = _rebuildUserSkillSet(studentData);
+  const ra = studentData?.resumeAnalysis;
+  resumeSkillsMatch = (ra && typeof ra.skillsMatch === "number")
+    ? Math.max(0, Math.min(100, Math.round(ra.skillsMatch)))
+    : null;
 }
 
+// Returns 0-100 (precise per-internship), the global resumeSkillsMatch as
+// a fallback, or null if we genuinely have nothing to score against.
 function computeMatch(jobSkills) {
-  return _computeMatch(jobSkills, userSkillSet);
+  const precise = _computeMatch(jobSkills, userSkillSet);
+  if (precise !== null) return precise;
+  if (resumeSkillsMatch !== null) return resumeSkillsMatch;
+  return null;
 }
 
 async function hydrateCompanyLogo(companyId) {
@@ -85,12 +99,14 @@ function repaintStatsHeader(visibleJobs) {
 
   const avgEl = document.getElementById("avgMatch");
   if (!avgEl) return;
-  const withMatch = (visibleJobs || []).filter((j) => Number.isFinite(Number(j.match)));
+  // Only count jobs that actually scored — null means we couldn't compute
+  // a match, including it as 0 would skew the average.
+  const withMatch = (visibleJobs || []).filter((j) => typeof j.match === "number");
   if (!withMatch.length) {
     avgEl.textContent = "—";
     return;
   }
-  const avg = withMatch.reduce((sum, j) => sum + Number(j.match), 0) / withMatch.length;
+  const avg = withMatch.reduce((sum, j) => sum + j.match, 0) / withMatch.length;
   avgEl.textContent = Math.round(avg) + "%";
 }
 
@@ -180,7 +196,9 @@ document.addEventListener("DOMContentLoaded", () => {
       location:    d.location    || "Remote",
       type:        (d.type       || "remote").toLowerCase(),
       duration:    d.durationKey || d.duration || "3-4",
-      match:       typeof d.match === "number" ? d.match : 70,
+      // null = unknown (no CV analyzed and no manual skills) — render
+      // hides the badge instead of lying with a 70% default.
+      match:       null,
       desc:        d.desc        || d.description || "No description provided.",
       skills,
       status:      d.status      || "Open",
@@ -239,10 +257,10 @@ document.addEventListener("DOMContentLoaded", () => {
               <small>${safe(j.company)} • ${safe(j.location)}</small>
             </div>
           </div>
-          <div class="match">
-            <b>${Number(j.match) || 0}%</b>
-            <div class="muted">match</div>
-          </div>
+          ${typeof j.match === "number"
+            ? `<div class="match"><b>${j.match}%</b><div class="muted">match</div></div>`
+            : `<div class="match match--unknown" title="Add your skills or analyze your CV to see a match score"><b>—</b><div class="muted">match</div></div>`
+          }
         </div>
 
         <div class="tags">
@@ -338,17 +356,27 @@ document.addEventListener("DOMContentLoaded", () => {
     if (state.skills.size) {
       list = list.filter((j) => {
         const lower = j.skills.map((x) => String(x).toLowerCase());
-        return [...state.skills].every((s) => lower.includes(s));
+        // state.skills may contain mixed-case entries from data-skill
+        // attributes; compare lowercase-to-lowercase to avoid false misses.
+        return [...state.skills].every((s) =>
+          lower.includes(String(s).toLowerCase())
+        );
       });
     }
 
     list.forEach((j) => {
-      const m = computeMatch(j.skills);
-      if (m !== null) j.match = m;
+      // Always overwrite — null clears any stale value when the student
+      // hasn't analyzed their CV yet.
+      j.match = computeMatch(j.skills);
     });
 
     if (state.sort === "match") {
-      list.sort((a, b) => (b.match || 0) - (a.match || 0));
+      // null sorts last; same scores keep their order via stable sort.
+      list.sort((a, b) => {
+        const am = typeof a.match === "number" ? a.match : -1;
+        const bm = typeof b.match === "number" ? b.match : -1;
+        return bm - am;
+      });
     }
 
     if (state.sort === "company") {
@@ -358,7 +386,9 @@ document.addEventListener("DOMContentLoaded", () => {
     render(list);
   }
 
-  // chip groups
+  // chip groups — each click also re-runs the filter so the list updates
+  // immediately. Previous version mutated state but never triggered a
+  // re-render, so chip filters silently did nothing.
   function setupChipGroup(selector, key, attr) {
     const chips = document.querySelectorAll(selector);
     chips.forEach((c) => {
@@ -366,6 +396,7 @@ document.addEventListener("DOMContentLoaded", () => {
         chips.forEach((x) => x.classList.remove("active"));
         c.classList.add("active");
         state[key] = c.getAttribute(attr) || "";
+        filterJobs();
       });
     });
   }
@@ -380,6 +411,7 @@ document.addEventListener("DOMContentLoaded", () => {
       c.classList.toggle("active");
       if (state.skills.has(s)) state.skills.delete(s);
       else state.skills.add(s);
+      filterJobs();
     });
   });
 

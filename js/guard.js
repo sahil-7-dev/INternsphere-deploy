@@ -4,7 +4,12 @@ import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.10.0/f
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { roleHome } from "./lib/role-home.js";
 
+function guestRole() {
+  try { return sessionStorage.getItem("guestRole") || ""; } catch { return ""; }
+}
+
 export function requireAuth(redirectTo = "login.html") {
+  if (guestRole()) return;
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
       const next = encodeURIComponent(window.location.pathname + window.location.search);
@@ -39,7 +44,13 @@ export function requireAdmin(fallback = "login.html") {
 }
 
 export function requireRole(allowedRoles) {
+
+
+
   const allowed = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+
+  const gr = guestRole();
+  if (gr && allowed.includes(gr)) return;
 
   onAuthStateChanged(auth, async (user) => {
     if (!user) {

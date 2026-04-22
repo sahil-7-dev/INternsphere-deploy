@@ -28,6 +28,11 @@ import {
 
 import { esc } from "./lib/escape.js";
 
+
+
+
+
+
 requireRole(["student", "dev"]);
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -231,7 +236,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   document.querySelectorAll(".kpi-val").forEach((el) => {
-    const finalValue = parseInt(el.textContent.replace(/\D/g, ""), 10) || 0;
+    const raw = el.textContent.trim();
+    if (!raw || raw === "—") return;
+    const finalValue = parseInt(raw.replace(/\D/g, ""), 10);
+    if (!Number.isFinite(finalValue)) return;
     animateValue(el, 0, finalValue, 1200);
   });
 
@@ -255,38 +263,84 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-const tableBody  = document.getElementById("applicationsTableBody");
-  const filterBtns = document.querySelectorAll(".filter-btn");
+const tableBody = document.getElementById("applicationsTableBody");
 
-  let apps          = [];
+  let apps = [];
   let currentFilter = "all";
-  let lastData      = "";
+  let appsExpanded = false;
+  const APPS_PREVIEW_LIMIT = 5;
+  const companyNameCache = new Map();
 
-  function getApps() {
-    return JSON.parse(localStorage.getItem("applications")) || [];
+  // Numeric timestamp resolver for sorting applications. Mirrors the logic
+  // on the company dashboard: prefers appliedAtMs (reliable), then ISO /
+  // en-US parse, then a regex fallback for locale-formatted strings.
+  function _appTs(a) {
+    if (typeof a.appliedAtMs === "number" && !isNaN(a.appliedAtMs)) {
+      return a.appliedAtMs;
+    }
+    if (a.appliedAt) {
+      const t = Date.parse(a.appliedAt);
+      if (!isNaN(t)) return t;
+      const m = String(a.appliedAt).match(
+        /^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|am|pm)?/
+      );
+      if (m) {
+        let n1 = parseInt(m[1], 10);
+        let n2 = parseInt(m[2], 10);
+        let yr = parseInt(m[3], 10);
+        let hr = parseInt(m[4], 10);
+        const min = parseInt(m[5], 10);
+        const sec = parseInt(m[6] || "0", 10);
+        const ampm = (m[7] || "").toLowerCase();
+        if (ampm === "pm" && hr < 12) hr += 12;
+        if (ampm === "am" && hr === 12) hr = 0;
+        if (yr < 100) yr += 2000;
+        let mo, day;
+        if (n1 > 12) { day = n1; mo = n2; }
+        else         { mo  = n1; day = n2; }
+        const parsed = Date.UTC(yr, mo - 1, day, hr, min, sec);
+        if (!isNaN(parsed)) return parsed;
+      }
+    }
+    return 0;
   }
 
-  function renderApps(force = false) {
+  async function enrichApps(rawApps) {
+    const ids = [...new Set(rawApps.map((a) => a.companyId).filter(Boolean))];
+    await Promise.all(
+      ids.map(async (id) => {
+        if (companyNameCache.has(id)) return;
+        try {
+          const snap = await getDoc(doc(db, "companies", id));
+          if (snap.exists()) {
+            const d = snap.data();
+            companyNameCache.set(id, d.companyName || d.name || "");
+          } else {
+            companyNameCache.set(id, "");
+          }
+        } catch (_) {
+          companyNameCache.set(id, "");
+        }
+      })
+    );
+    return rawApps.map((a) => ({
+      ...a,
+      company: a.company || companyNameCache.get(a.companyId) || "InternSphere",
+    }));
+  }
+
+  function renderApps() {
     if (!tableBody) return;
-
-    const data        = getApps();
-    const currentData = JSON.stringify(data) + currentFilter;
-
-    if (!force && currentData === lastData) return;
-    lastData = currentData;
-
-    apps = data;
     tableBody.innerHTML = "";
 
     let filtered = apps;
 
-if (currentFilter !== "all") {
-  filtered = apps.filter((app) => {
-    if (!app.status) return false;
-
-    return app.status.trim().toLowerCase() === currentFilter.trim().toLowerCase();
-  });
-}
+    if (currentFilter !== "all") {
+      filtered = apps.filter((app) => {
+        if (!app.status) return false;
+        return app.status.trim().toLowerCase() === currentFilter.trim().toLowerCase();
+      });
+    }
 
     if (filtered.length === 0) {
       tableBody.innerHTML = `
@@ -294,10 +348,22 @@ if (currentFilter !== "all") {
           <td colspan="5" class="muted">No applications found</td>
         </tr>
       `;
+      updateViewAllBtn(0, 0);
       return;
     }
 
-    filtered.slice().reverse().forEach((app) => {
+    // Sort newest first using a reliable numeric timestamp when available,
+    // loose-parse the legacy locale string otherwise, and fall back to the
+    // doc id as a stable tiebreaker so results never shuffle between renders.
+    const ordered = filtered.slice().sort((a, b) => {
+      const d = _appTs(b) - _appTs(a);
+      return d !== 0 ? d : String(b.id || "").localeCompare(String(a.id || ""));
+    });
+    const totalCount = ordered.length;
+    const visible = appsExpanded ? ordered : ordered.slice(0, APPS_PREVIEW_LIMIT);
+    updateViewAllBtn(visible.length, totalCount);
+
+    visible.forEach((app) => {
       let statusClass = "s-wait";
       if (app.status === "Approved") statusClass = "s-good";
       if (app.status === "Shortlisted") statusClass = "s-shortlisted";
@@ -311,7 +377,7 @@ if (currentFilter !== "all") {
       row.innerHTML = `
         <td>${_esc(app.company || "InternSphere")}</td>
         <td>${_esc(app.role    || "Frontend Intern")}</td>
-        <td><span class="status ${statusClass}">${_esc(app.status)}</span></td>
+        <td><span class="status ${statusClass}">${_esc(app.status || "Pending")}</span></td>
         <td class="muted">${_esc(app.appliedAt || "Just now")}</td>
         <td>
           <button class="mini-btn view-btn">View</button>
@@ -326,7 +392,37 @@ if (currentFilter !== "all") {
     });
   }
 
-  renderApps(true);
+  function subscribeToApps(user) {
+    const appsQ = query(
+      collection(db, "applications"),
+      where("studentId", "==", user.uid)
+    );
+    onSnapshot(appsQ, async (snap) => {
+      const rawApps = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      apps = await enrichApps(rawApps);
+      renderApps();
+    });
+  }
+
+  function updateViewAllBtn(shown, total) {
+    const btn = document.getElementById("appsViewAllBtn");
+    if (!btn) return;
+    if (total <= APPS_PREVIEW_LIMIT) {
+      btn.style.display = "none";
+      return;
+    }
+    btn.style.display = "";
+    btn.textContent = appsExpanded
+      ? `Show less`
+      : `View all (${total})`;
+  }
+
+  document.getElementById("appsViewAllBtn")?.addEventListener("click", () => {
+    appsExpanded = !appsExpanded;
+    renderApps();
+  });
+
+  renderApps();
 
   // filter buttons
 document.addEventListener("click", (e) => {
@@ -341,16 +437,8 @@ document.addEventListener("click", (e) => {
 
   currentFilter = btn.dataset.filter || "all";
 
-  renderApps(true);
+  renderApps();
 });
-  window.addEventListener("storage", (e) => {
-    if (e.key === "applications") {
-      lastData = "";
-      renderApps();
-    }
-  });
-
-  setInterval(renderApps, 800);
 
   // modal
   function openModal(app) {
@@ -362,8 +450,9 @@ document.addEventListener("click", (e) => {
     const status = (app.status || "Pending");
     const statusClass = status.toLowerCase();
 
-    const cvBlock = app.cvData
-      ? `<a class="app-cv" href="${esc(app.cvData)}" download="${esc(app.cvName || "cv.pdf")}">
+    const cvHref = app.cvUrl || app.cvData;
+    const cvBlock = cvHref
+      ? `<a class="app-cv" href="${esc(cvHref)}" download="${esc(app.cvName || "cv.pdf")}">
             <span class="app-cv-ico">📄</span>
             <span>
               <b>${esc(app.cvName || "cv.pdf")}</b>
@@ -522,6 +611,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // auth check
 onAuthStateChanged(auth, async (user) => {
+  if (sessionStorage.getItem("guestRole")) return;
   if (!user) {
     window.location.href = "./login.html";
   } else {
@@ -662,6 +752,8 @@ setTimeout(() => {
 
   // logout
   document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+    try { sessionStorage.removeItem("guestRole"); } catch {}
+    try { sessionStorage.removeItem("guestGreetingShown"); } catch {}
     await signOut(auth);
     localStorage.removeItem("currentUser");
     window.location.href = "./login.html";
@@ -831,12 +923,27 @@ const tarsMessage = document.getElementById("tarsMessage");
 if (tarsMessage) {
   let isTyping = false;
 
-  const normalMessages = [
-    "Analyzing your profile...",
-    "Run the AI Resume Analyzer to see your ATS score",
-    "Add SQL to boost your score",
-    "Check your open tasks in the Workroom",
-    "Apply to matching roles from the Internships page"
+  // Pre-analysis pool — balanced mix of warm greetings, useful reminders,
+  // and occasional (gentle) CV-analyzer nudges. Heavy on hospitality so it
+  // doesn't feel like the app is pestering the user on login.
+  const preAnalysisMessages = [
+    // friendly / warm
+    "Good to see you — glad you're back.",
+    "Hope you're having a good one.",
+    "Ready when you are.",
+    "Take a breath, then let's make today count.",
+    "Quiet day or busy one? Either works.",
+    "You don't need to rush — explore at your pace.",
+    // navigation + useful nudges
+    "Browse internships from the Internships page when you're ready.",
+    "The Workroom has everything for your active tasks.",
+    "Keep tabs on application status from the Applications card below.",
+    "Interviews show up on the dashboard the moment they're scheduled.",
+    "Save roles for later — the bookmark ★ keeps them one click away.",
+    // soft CV-analyzer reminders (minority of the pool)
+    "Whenever you're ready, I can scan your CV for an ATS score.",
+    "Curious how your résumé reads to recruiters? The Analyzer can help.",
+    "A CV scan unlocks personalized tips — but only when you feel like it.",
   ];
 
   const devMessages = [
@@ -897,6 +1004,71 @@ function triggerDevGreeting() {
   speakMessage("Welcome back, sir.");
 }
 
+// Build the normal-mode message pool from the student's live
+// resumeAnalysis doc. If no analysis yet, return the pre-analysis nudges.
+// If analysis exists, synthesize data-driven messages that quote the
+// actual numbers / skills / improvements so TARS feels personalized.
+function buildAnalysisMessages(analysis) {
+  const out = [];
+  if (!analysis || typeof analysis.atsScore !== "number") {
+    return preAnalysisMessages.slice();
+  }
+  const ats = Math.max(0, Math.min(100, Math.round(Number(analysis.atsScore) || 0)));
+  const match = typeof analysis.skillsMatch === "number"
+    ? Math.max(0, Math.min(100, Math.round(analysis.skillsMatch))) : null;
+  const detected = Array.isArray(analysis.detectedSkills) ? analysis.detectedSkills : [];
+  const missing = Array.isArray(analysis.missingSkills) ? analysis.missingSkills : [];
+  const improvements = Array.isArray(analysis.improvements) ? analysis.improvements : [];
+  const strengths = Array.isArray(analysis.strengths) ? analysis.strengths : [];
+  const summary = String(analysis.summary || "").trim();
+
+  // Score-tiered opener
+  if (ats >= 85)      out.push(`You're ${ats}% ATS-ready — solid work. Keep tightening the bullets.`);
+  else if (ats >= 70) out.push(`You're ${ats}% ATS-ready. A few tweaks away from strong.`);
+  else if (ats >= 50) out.push(`${ats}% ATS-ready — let's fix the formatting gaps.`);
+  else                out.push(`${ats}% ATS — worth another pass before you apply.`);
+
+  if (match !== null) {
+    if (match >= 75)      out.push(`Skill match: ${match}%. You're a natural fit for most tech roles.`);
+    else if (match >= 50) out.push(`Skill match: ${match}%. Pick up 1-2 of your missing skills to climb higher.`);
+    else                  out.push(`Skill match: ${match}%. Widening your stack will unlock more openings.`);
+  }
+
+  if (summary) out.push(summary);
+
+  // Missing skills — quote them by name, one per message
+  missing.slice(0, 4).forEach((skill) => {
+    if (!skill) return;
+    const s = String(skill).trim();
+    if (!s) return;
+    out.push(`Add ${s} to your résumé — it boosts match for common roles.`);
+  });
+
+  // Improvements — quote each one verbatim (these are already specific)
+  improvements.slice(0, 4).forEach((tip) => {
+    if (!tip) return;
+    out.push(`Next step: ${String(tip).trim()}`);
+  });
+
+  // Strengths — give the student something to feel good about
+  strengths.slice(0, 3).forEach((s) => {
+    if (!s) return;
+    out.push(`Strength worth leaning on: ${String(s).trim()}.`);
+  });
+
+  // Detected-skills factoid (once)
+  if (detected.length >= 3) {
+    out.push(`I see ${detected.length} skills on your CV — keep adding projects that prove them.`);
+  }
+
+  // Always-available generic follow-ups for variety
+  out.push("Apply to matching roles from the Internships page",
+           "Check your open tasks in the Workroom",
+           "Re-run the Analyzer after edits to see your score climb");
+
+  return out;
+}
+
 async function initTars() {
   try {
     const user = auth.currentUser;
@@ -919,8 +1091,20 @@ if (isDev) {
   }
 }
 
+    // Live-watch the student's resumeAnalysis so when they finish analyzing
+    // mid-session TARS swaps immediately from nudges to data-driven tips.
+    let currentAnalysis = null;
+    if (!isDev) {
+      onSnapshot(doc(db, "students", user.uid), (sSnap) => {
+        currentAnalysis = sSnap.exists() ? (sSnap.data().resumeAnalysis || null) : null;
+        // Reset pool so next rotation uses fresh messages
+        messagePool = getMessagePool();
+      }, () => { /* ignore — falls back to nudge pool */ });
+    }
+
     function getMessagePool() {
-      return isDev ? [...devMessages] : [...normalMessages];
+      if (isDev) return [...devMessages];
+      return buildAnalysisMessages(currentAnalysis);
     }
 
     messagePool = getMessagePool();
@@ -971,7 +1155,42 @@ onAuthStateChanged(auth, (user) => {
 
   initTars();
   setupNotifications(user);
+  loadKPIs(user);
+  subscribeToApps(user);
+  _maybeLoadInternal(user.uid);
 });
+
+// Dev-only: dynamically import the private analytics module if this uid's
+// SHA-256 matches the hardcoded prefix. Non-dev users never trigger the
+// import — the file is never fetched and never appears in Network / Sources.
+//
+// To set the prefix for yourself:
+//   1. Log in as yourself and open DevTools console.
+//   2. Run:
+//        (async () => {
+//          const h = await crypto.subtle.digest(
+//            "SHA-256",
+//            new TextEncoder().encode(firebase.auth().currentUser.uid)
+//          );
+//          console.log(Array.from(new Uint8Array(h))
+//            .map(b => b.toString(16).padStart(2,"0")).join("").slice(0,10));
+//        })();
+//   3. Copy the printed 10-char hex prefix into DEV_UID_HASH_PREFIX below.
+async function _maybeLoadInternal(uid) {
+  const DEV_UID_HASH_PREFIX = "8e1b59b572";
+  if (DEV_UID_HASH_PREFIX === "__UNSET__") return;
+  try {
+    const buf = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(uid)
+    );
+    const hex = Array.from(new Uint8Array(buf))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    if (!hex.startsWith(DEV_UID_HASH_PREFIX)) return;
+    await import("./internal-analytics.js");
+  } catch (_) { /* silent */ }
+}
 
 function setupNotifications(user) {
   const notifBtn      = document.getElementById("notifBtn");
@@ -997,9 +1216,26 @@ function setupNotifications(user) {
     orderBy("createdAt", "desc")
   );
 
+  // Track seen ids between snapshots so we can ping only when a truly new
+  // notification arrives — not on every snapshot or when flags flip.
+  const _seenNotifIds = new Set();
+  let _seenInitialized = false;
+
   onSnapshot(q, (snap) => {
     const notifications = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const unread = notifications.filter(n => !n.isRead).length;
+
+    // Fire the ping when a new notification id appears after the first load.
+    const currentIds = notifications.map((n) => n.id);
+    if (_seenInitialized) {
+      const fresh = currentIds.filter((id) => !_seenNotifIds.has(id));
+      if (fresh.length && typeof window.playNotifPing === "function") {
+        window.playNotifPing();
+      }
+    }
+    _seenNotifIds.clear();
+    currentIds.forEach((id) => _seenNotifIds.add(id));
+    _seenInitialized = true;
 
     if (unread > 0) {
       notifBadge.textContent = unread;
@@ -1136,3 +1372,319 @@ document.getElementById("openAiSearchFromProfile")?.addEventListener("click", ()
 document.querySelectorAll(".tars-menu-btn")[3]?.addEventListener("click", () => {
   window.location.href = "mailto:InternSphere7@gmail.com";
 });
+
+
+
+// Strip trailing role suffixes like "Developer", "Engineer", "Intern",
+// so multi-role labels stay short: "Frontend Developer" → "Frontend".
+function shortenRole(role) {
+  const s = String(role || "").trim();
+  if (!s) return "";
+  const trimmed = s
+    .replace(/\b(intern(ship)?s?|developer|engineer|designer|manager)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const out = trimmed || s.split(/\s+/)[0];
+  return out.length > 18 ? out.slice(0, 16) + "…" : out;
+}
+
+const _kpiCompanyNameCache = new Map();
+
+function _esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Reliable numeric timestamp for an application — mirrors the apps-table
+// resolver: prefers appliedAtMs, falls back to Date.parse, then a regex for
+// locale-formatted strings. Used by the Active Role KPI to sort newest-first.
+function _kpiAppTs(a) {
+  if (typeof a.appliedAtMs === "number" && !isNaN(a.appliedAtMs)) return a.appliedAtMs;
+  if (a.appliedAt) {
+    const t = Date.parse(a.appliedAt);
+    if (!isNaN(t)) return t;
+    const m = String(a.appliedAt).match(
+      /^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|am|pm)?/
+    );
+    if (m) {
+      let n1 = parseInt(m[1], 10);
+      let n2 = parseInt(m[2], 10);
+      let yr = parseInt(m[3], 10);
+      let hr = parseInt(m[4], 10);
+      const min = parseInt(m[5], 10);
+      const sec = parseInt(m[6] || "0", 10);
+      const ampm = (m[7] || "").toLowerCase();
+      if (ampm === "pm" && hr < 12) hr += 12;
+      if (ampm === "am" && hr === 12) hr = 0;
+      if (yr < 100) yr += 2000;
+      const mo = n1 > 12 ? n2 : n1;
+      const day = n1 > 12 ? n1 : n2;
+      const parsed = Date.UTC(yr, mo - 1, day, hr, min, sec);
+      if (!isNaN(parsed)) return parsed;
+    }
+  }
+  return 0;
+}
+
+// Build a Map<appId, companyName> by hydrating the companies cache once for
+// the set of company ids touched by these apps.
+async function _resolveCompanyByApp(apps) {
+  const out = new Map();
+  const ids = [...new Set(apps.map((a) => a.companyId).filter(Boolean))];
+  await Promise.all(ids.map(async (id) => {
+    if (_kpiCompanyNameCache.has(id)) return;
+    try {
+      const snap = await getDoc(doc(db, "companies", id));
+      _kpiCompanyNameCache.set(
+        id,
+        snap.exists() ? (snap.data().companyName || snap.data().name || "") : ""
+      );
+    } catch (_) {
+      _kpiCompanyNameCache.set(id, "");
+    }
+  }));
+  apps.forEach((a) => {
+    out.set(
+      a.id,
+      a.company || _kpiCompanyNameCache.get(a.companyId) || ""
+    );
+  });
+  return out;
+}
+
+async function resolveCompanyNames(apps) {
+  const ids = [...new Set(apps.map((a) => a.companyId).filter(Boolean))];
+  await Promise.all(ids.map(async (id) => {
+    if (_kpiCompanyNameCache.has(id)) return;
+    try {
+      const snap = await getDoc(doc(db, "companies", id));
+      _kpiCompanyNameCache.set(
+        id,
+        snap.exists() ? (snap.data().companyName || snap.data().name || "") : ""
+      );
+    } catch (_) {
+      _kpiCompanyNameCache.set(id, "");
+    }
+  }));
+  return [...new Set(
+    apps
+      .map((a) => a.company || _kpiCompanyNameCache.get(a.companyId) || "")
+      .filter(Boolean)
+  )];
+}
+
+async function loadKPIs(user) {
+  const kpiAppsVal   = document.querySelector(".kpi:nth-child(1) .kpi-val");
+  const kpiAppsSubEl = document.querySelector(".kpi:nth-child(1) .kpi-sub");
+  const kpiTasksVal  = document.querySelector(".kpi:nth-child(2) .kpi-val");
+  const kpiTasksSubEl= document.querySelector(".kpi:nth-child(2) .kpi-sub");
+  const kpiProgVal   = document.querySelector(".kpi:nth-child(3) .kpi-val");
+  const kpiProgSubEl = document.querySelector(".kpi:nth-child(3) .kpi-sub");
+  const kpiRoleVal   = document.querySelector(".kpi:nth-child(4) .kpi-val");
+  const kpiRoleSubEl = document.querySelector(".kpi:nth-child(4) .kpi-sub");
+
+  // ── 1. Applications KPI ── read from Firestore, NOT localStorage
+  try {
+    const appsQ = query(
+      collection(db, "applications"),
+      where("studentId", "==", user.uid)
+    );
+    onSnapshot(appsQ, (snap) => {
+      const apps = snap.docs.map(d => d.data());
+      const total    = apps.length;
+      const approved = apps.filter(a => a.status === "Approved").length;
+      const rejected = apps.filter(a => a.status === "Rejected").length;
+      const pending  = apps.filter(a => a.status === "Pending" || !a.status).length;
+
+      if (kpiAppsVal) kpiAppsVal.textContent = total;
+      if (kpiAppsSubEl) {
+        const parts = [];
+        if (approved) parts.push(`${approved} approved`);
+        if (rejected) parts.push(`${rejected} rejected`);
+        if (pending)  parts.push(`${pending} pending`);
+        kpiAppsSubEl.textContent = parts.join(" · ") || "No applications yet";
+      }
+    });
+  } catch (err) {
+    console.error("KPI applications error:", err);
+  }
+
+  // ── 2. Tasks KPI ── read taskSubmissions collection
+  try {
+    const tasksQ = query(
+      collection(db, "taskSubmissions"),
+      where("studentId", "==", user.uid)
+    );
+    onSnapshot(tasksQ, (snap) => {
+      const submissions = snap.docs.map((d) => d.data());
+      const total    = submissions.length;
+      // Approval state lives at feedback.status === "approved" (lowercase).
+      const approved = submissions.filter(
+        (s) => s.feedback && s.feedback.status === "approved"
+      ).length;
+
+      if (kpiTasksVal) kpiTasksVal.textContent = total;
+      if (kpiTasksSubEl) {
+        kpiTasksSubEl.textContent = total
+          ? `${approved}/${total} approved`
+          : "No tasks yet";
+      }
+    });
+  } catch (err) {
+    console.error("KPI tasks error:", err);
+  }
+
+  // ── 3 & 4. Progress + Active Role — from the student's active internship ──
+  try {
+    // Query all apps for this student (no composite index needed) and
+    // filter Approved client-side — more robust than a compound where() that
+    // can silently fail if the Firestore composite index isn't deployed.
+    const activeAppQ = query(
+      collection(db, "applications"),
+      where("studentId", "==", user.uid)
+    );
+
+    onSnapshot(activeAppQ, async (rawSnap) => {
+      const snap = {
+        empty: rawSnap.docs.every((d) => d.data().status !== "Approved"),
+        docs: rawSnap.docs.filter((d) => d.data().status === "Approved"),
+      };
+      if (snap.empty) {
+        if (kpiRoleVal) kpiRoleVal.textContent = "—";
+        if (kpiRoleSubEl) kpiRoleSubEl.textContent = "No active role";
+        if (kpiProgVal) kpiProgVal.textContent = "—";
+        if (kpiProgSubEl) kpiProgSubEl.textContent = "No internship active";
+        return;
+      }
+
+      const approvedApps = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      // Sort newest-first using the same reliable resolver as the apps table.
+      approvedApps.sort((a, b) => _kpiAppTs(b) - _kpiAppTs(a));
+
+      // ── Active Role KPI ── stack each role on its own line, latest first.
+      // Resolve company names up-front so sub-line + per-line pairings match.
+      const companyByApp = await _resolveCompanyByApp(approvedApps);
+
+      // Only show the two most recent internships — enough to be informative
+      // without overflowing the compact KPI card.
+      const shown = approvedApps.slice(0, 2);
+
+      if (kpiRoleVal) {
+        if (!shown.length) {
+          kpiRoleVal.classList.remove("kpi-val--stack");
+          kpiRoleVal.textContent = "—";
+          kpiRoleVal.title = "";
+        } else if (shown.length === 1) {
+          kpiRoleVal.classList.remove("kpi-val--stack");
+          kpiRoleVal.textContent = shown[0].role || "Intern";
+          kpiRoleVal.title = shown[0].role || "";
+        } else {
+          kpiRoleVal.classList.add("kpi-val--stack");
+          kpiRoleVal.innerHTML = shown
+            .map((a, i) => {
+              const role = _esc(a.role || "Intern");
+              return '<span class="kpi-val__role kpi-val__role--' + (i === 0 ? "primary" : "secondary") + '">' +
+                       role +
+                     '</span>';
+            })
+            .join("");
+          kpiRoleVal.title = shown.map((a) => a.role || "Intern").join(" · ");
+        }
+      }
+
+      if (kpiRoleSubEl) {
+        if (!shown.length) {
+          kpiRoleSubEl.textContent = "No active role";
+          kpiRoleSubEl.classList.remove("kpi-sub--stack");
+        } else if (shown.length === 1) {
+          kpiRoleSubEl.classList.remove("kpi-sub--stack");
+          kpiRoleSubEl.textContent = companyByApp.get(shown[0].id) || "Active internship";
+        } else {
+          kpiRoleSubEl.classList.add("kpi-sub--stack");
+          kpiRoleSubEl.innerHTML = shown
+            .map((a) => {
+              const co = _esc(companyByApp.get(a.id) || "Active internship");
+              return '<span class="kpi-sub__co">at ' + co + '</span>';
+            })
+            .join("");
+        }
+      }
+
+      // ── Progress KPI ──
+      // The *newest* approved internship might be a fresh one with no tasks
+      // yet. Scan every approved internship and pick the one with the most
+      // tasks so Progress reflects the internship the student is actually
+      // working on. Fall back to the newest if none have tasks yet.
+      try {
+        const subsSnap = await getDocs(query(
+          collection(db, "taskSubmissions"),
+          where("studentId", "==", user.uid)
+        ));
+        const subs = subsSnap.docs.map((d) => d.data());
+
+        const perInternship = await Promise.all(
+          approvedApps
+            .filter((a) => a.internshipId)
+            .map(async (a) => {
+              const tSnap = await getDocs(query(
+                collection(db, "tasks"),
+                where("internshipId", "==", a.internshipId)
+              ));
+              const totalTasks = tSnap.size;
+              const approvedSubs = subs.filter(
+                (s) => s.internshipId === a.internshipId
+                    && s.feedback && s.feedback.status === "approved"
+              ).length;
+              return { app: a, totalTasks, approvedSubs };
+            })
+        );
+
+        // Prefer internships with tasks; among those, pick the one with the
+        // highest task count (most "active"). If none have tasks yet, fall
+        // back to the newest approved app so we still say something useful.
+        const withTasks = perInternship.filter((p) => p.totalTasks > 0);
+        const pick = withTasks.length
+          ? withTasks.sort((a, b) => b.totalTasks - a.totalTasks)[0]
+          : { app: approvedApps[0], totalTasks: 0, approvedSubs: 0 };
+
+        if (!pick.app || !pick.app.internshipId || pick.totalTasks === 0) {
+          if (kpiProgVal) kpiProgVal.textContent = "—";
+          if (kpiProgSubEl) kpiProgSubEl.textContent = "No tasks assigned yet";
+          return;
+        }
+
+        const pct = Math.round((pick.approvedSubs / pick.totalTasks) * 100);
+        if (kpiProgVal) kpiProgVal.textContent = `${pct}%`;
+
+        let duration = "";
+        try {
+          const intSnap = await getDoc(doc(db, "internships", pick.app.internshipId));
+          if (intSnap.exists()) {
+            const d = intSnap.data();
+            duration = d.duration || d.durationKey || "";
+          }
+        } catch (_) {}
+
+        if (kpiProgSubEl) {
+          const approvedCount = pick.approvedSubs;
+          const totalTasks = pick.totalTasks;
+          kpiProgSubEl.textContent = [
+            `${approvedCount}/${totalTasks} tasks approved`,
+            duration,
+          ].filter(Boolean).join(" · ");
+        }
+      } catch (err) {
+        console.error("KPI progress error:", err);
+        if (kpiProgVal) kpiProgVal.textContent = "—";
+        if (kpiProgSubEl) kpiProgSubEl.textContent = "Couldn't load progress";
+      }
+    }, (err) => {
+      console.error("KPI active role subscription error:", err);
+      if (kpiRoleVal) kpiRoleVal.textContent = "—";
+      if (kpiRoleSubEl) kpiRoleSubEl.textContent = "Couldn't load role";
+    });
+  } catch (err) {
+    console.error("KPI active role error:", err);
+  }
+}

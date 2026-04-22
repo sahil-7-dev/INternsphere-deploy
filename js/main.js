@@ -101,48 +101,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 2400);
   }
 
-  // FILE UPLOAD UI
-
-  const uploadBox = document.getElementById("uploadBox");
-  const fileInput = document.getElementById("cv");
-
-  if (uploadBox && fileInput) {
-    uploadBox.addEventListener("click", () => fileInput.click());
-    fileInput.addEventListener("change", () => {
-      if (fileInput.files.length > 0)
-        uploadBox.querySelector(".upload-main").textContent = fileInput.files[0].name;
-    });
-  }
-
-  // APPLY FORM
-
-  const form = document.getElementById("applyForm");
-
-  if (form) {
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
-
-      const application = {
-        id:        Date.now(),
-        name:      document.getElementById("name").value,
-        email:     document.getElementById("email").value,
-        phone:     document.getElementById("phone").value,
-        cv:        document.getElementById("cv")?.files[0]?.name || "No file",
-        role:      "Frontend Intern",
-        company:   "InternSphere",
-        status:    "Pending",
-        appliedAt: new Date().toLocaleString(),
-      };
-
-      const apps = JSON.parse(localStorage.getItem("applications")) || [];
-      apps.push(application);
-      localStorage.setItem("applications", JSON.stringify(apps));
-
-      document.getElementById("successMsg").style.display = "block";
-      form.reset();
-    });
-  }
-
 });
 
 const brand = document.querySelector(".brand");

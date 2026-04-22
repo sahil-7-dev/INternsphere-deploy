@@ -339,10 +339,17 @@ function openRejectModal(app, clearFields) {
 
 var internshipsCache = [];
 var appsCache        = [];
+var approvedSubsCache = [];        // taskSubmissions with feedback.status === "approved"
+var tasksCacheByInternship = {};   // internshipId -> [tasks]
 var editingId        = null;
 var currentFilter    = "all";
 var searchQuery      = "";
 var currentSort      = "newest";
+var currentPage      = 1;
+var APPS_PER_PAGE    = 9;
+var filteredCount    = 0;
+var intCurrentPage   = 1;
+var INT_PER_PAGE     = 9;
 
 // theme
 (function () {
@@ -416,11 +423,16 @@ function primeStudents(apps, onReady) {
     getDoc(doc(db, "students", id))
       .then(function (s) {
         studentCache[id] = s.exists()
-          ? { name: s.data().name || "", profilePic: s.data().profilePic || "" }
-          : { name: "", profilePic: "" };
+          ? {
+              name: s.data().name || "",
+              email: s.data().email || "",
+              phone: s.data().phone || "",
+              profilePic: s.data().profilePic || "",
+            }
+          : { name: "", email: "", phone: "", profilePic: "" };
       })
       .catch(function () {
-        studentCache[id] = { name: "", profilePic: "" };
+        studentCache[id] = { name: "", email: "", phone: "", profilePic: "" };
       })
       .finally(function () {
         studentPending.delete(id);
@@ -537,18 +549,29 @@ function renderDashboard() {
     if (!apps.length) {
       feed.innerHTML = '<p class="empty-hint">No applications yet.</p>';
     } else {
+      var recent = apps.slice().sort(function (a, b) {
+        var ta = a.appliedAt ? Date.parse(a.appliedAt) : 0;
+        var tb = b.appliedAt ? Date.parse(b.appliedAt) : 0;
+        return (isNaN(tb) ? 0 : tb) - (isNaN(ta) ? 0 : ta);
+      }).slice(0, 6);
+
       feed.innerHTML = "";
-      apps.slice().reverse().slice(0, 6).forEach(function (app) {
+      recent.forEach(function (app) {
         var status = (app.status || "Pending").toLowerCase();
         var cached = app.studentId ? studentCache[app.studentId] : null;
-        var displayName = (cached && cached.name) || app.name || app.email;
-        var row    = document.createElement("div");
+        var resolvedName  = app.name  || (cached && cached.name)  || "";
+        var resolvedEmail = app.email || (cached && cached.email) || "";
+        var displayName = resolvedName
+          || resolvedEmail
+          || (app.studentId ? "Applicant " + String(app.studentId).slice(0, 6) : "Applicant");
+        var metaLine = app.role || "General Application";
+        var row = document.createElement("div");
         row.className = "feed-row";
         row.innerHTML =
           applicantAvatarHtml(app, { size: "sm", className: "feed-avatar" }) +
           '<div class="feed-info">' +
             '<div class="feed-name">'  + esc(displayName)                   + '</div>' +
-            '<div class="feed-meta">'  + esc(app.role || "General Application") + '</div>' +
+            '<div class="feed-meta">'  + esc(metaLine) + '</div>' +
           '</div>' +
           '<span class="badge ' + status + '">' + esc(app.status || "Pending") + '</span>';
         feed.appendChild(row);
@@ -775,17 +798,64 @@ function renderApps() {
     });
   }
 
+  // Returns a numeric timestamp in ms for sort comparisons.
+  // 1. Prefer the explicit numeric appliedAtMs we set on new submissions.
+  // 2. Otherwise try Date.parse on appliedAt (works for ISO strings and
+  //    most en-US locale strings).
+  // 3. For older locale-formatted strings that Date.parse can't handle
+  //    (e.g. "DD/MM/YYYY, HH:MM:SS"), try a tolerant regex that swaps
+  //    day/month. This keeps legacy rows from all falling to "0" and
+  //    shuffling randomly under a newest/oldest sort.
+  // 4. Last resort: 0 (will tie-break by doc id, which at least keeps a
+  //    stable order instead of Firestore's random default).
   function tsOf(a) {
+    if (typeof a.appliedAtMs === "number" && !isNaN(a.appliedAtMs)) {
+      return a.appliedAtMs;
+    }
     if (a.appliedAt) {
       var t = Date.parse(a.appliedAt);
       if (!isNaN(t)) return t;
+      // Loose parse for "D/M/YYYY, H:MM:SS [AM/PM]" or similar
+      var m = String(a.appliedAt).match(
+        /^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|am|pm)?/
+      );
+      if (m) {
+        var n1  = parseInt(m[1], 10);
+        var n2  = parseInt(m[2], 10);
+        var yr  = parseInt(m[3], 10);
+        var hr  = parseInt(m[4], 10);
+        var min = parseInt(m[5], 10);
+        var sec = parseInt(m[6] || "0", 10);
+        var ampm = (m[7] || "").toLowerCase();
+        if (ampm === "pm" && hr < 12) hr += 12;
+        if (ampm === "am" && hr === 12) hr = 0;
+        if (yr < 100) yr += 2000;
+        // Pick month/day: if first number > 12 it must be the day
+        var mo, day;
+        if (n1 > 12)       { day = n1; mo = n2; }
+        else if (n2 > 12)  { mo  = n1; day = n2; }
+        else               { mo  = n1; day = n2; } // ambiguous, assume M/D
+        var parsed = Date.UTC(yr, mo - 1, day, hr, min, sec);
+        if (!isNaN(parsed)) return parsed;
+      }
     }
     return 0;
   }
+  // Stable tiebreaker — when two rows have equal tsOf(), fall back to the
+  // Firestore doc id so newest-first stays deterministic instead of random.
+  function tie(a, b) {
+    return (b.id || "").localeCompare(a.id || "");
+  }
   if (currentSort === "newest") {
-    filtered.sort(function (a, b) { return tsOf(b) - tsOf(a); });
+    filtered.sort(function (a, b) {
+      var d = tsOf(b) - tsOf(a);
+      return d !== 0 ? d : tie(a, b);
+    });
   } else if (currentSort === "oldest") {
-    filtered.sort(function (a, b) { return tsOf(a) - tsOf(b); });
+    filtered.sort(function (a, b) {
+      var d = tsOf(a) - tsOf(b);
+      return d !== 0 ? d : -tie(a, b);
+    });
   } else if (currentSort === "unreviewed") {
     filtered.sort(function (a, b) {
       var aP = (a.status || "Pending") === "Pending" ? 0 : 1;
@@ -797,17 +867,44 @@ function renderApps() {
 
   grid.innerHTML = "";
 
+  var pager     = document.getElementById("apps-pager");
+  var pagerInfo = document.getElementById("pager-info");
+  var pagerPrev = document.getElementById("pager-prev");
+  var pagerNext = document.getElementById("pager-next");
+
+  filteredCount = filtered.length;
+
   if (!filtered.length) {
     if (empty) empty.style.display = "block";
+    if (pager) pager.style.display = "none";
     return;
   }
   if (empty) empty.style.display = "none";
 
-  filtered.forEach(function (app) {
+  var totalPages = Math.max(1, Math.ceil(filtered.length / APPS_PER_PAGE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
+
+  var startIdx = (currentPage - 1) * APPS_PER_PAGE;
+  var pageSlice = filtered.slice(startIdx, startIdx + APPS_PER_PAGE);
+
+  if (pager) {
+    pager.style.display = totalPages > 1 ? "flex" : "none";
+    if (pagerInfo) pagerInfo.textContent = "Page " + currentPage + " of " + totalPages;
+    if (pagerPrev) pagerPrev.disabled = currentPage <= 1;
+    if (pagerNext) pagerNext.disabled = currentPage >= totalPages;
+  }
+
+  pageSlice.forEach(function (app) {
     var status = app.status || "Pending";
     var cached = app.studentId ? studentCache[app.studentId] : null;
-    var displayName = (cached && cached.name) || app.name || app.email || "Student";
-    var subLine = (cached && cached.name && app.email) ? app.email : (app.role || "General Application");
+    var resolvedName  = app.name  || (cached && cached.name)  || "";
+    var resolvedEmail = app.email || (cached && cached.email) || "";
+    var resolvedPhone = app.phone || (cached && cached.phone) || "";
+    var displayName = resolvedName
+      || resolvedEmail
+      || (app.studentId ? "Applicant " + String(app.studentId).slice(0, 6) : "Applicant");
+    var subLine = (resolvedName && resolvedEmail) ? resolvedEmail : (app.role || "General Application");
 
     var card = document.createElement("div");
     card.className = "app-card";
@@ -823,9 +920,15 @@ function renderApps() {
         '<span class="badge ' + status.toLowerCase() + '">' + esc(status) + '</span>' +
       '</div>' +
       '<div class="ac-meta">' +
+        (resolvedEmail
+          ? '<div class="ac-meta-row">' +
+              '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l6 5 6-5"/><rect x="2" y="4" width="12" height="9" rx="1.5"/></svg>' +
+              '<a class="ac-email" href="mailto:' + esc(resolvedEmail) + '">' + esc(resolvedEmail) + '</a>' +
+            '</div>'
+          : '') +
         '<div class="ac-meta-row">' +
           '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 3a1 1 0 011-1h2l1 3-1.5 1.5A11 11 0 009.5 11.5L11 10l3 1v2a1 1 0 01-1 1A13 13 0 012 3z"/></svg>' +
-          esc(app.phone || "—") +
+          esc(resolvedPhone || "—") +
         '</div>' +
         '<div class="ac-meta-row">' +
           '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l6 5 6-5"/><rect x="2" y="4" width="12" height="9" rx="1.5"/></svg>' +
@@ -897,15 +1000,167 @@ async function loadInternships() {
   renderDashboard();
 }
 
+// ─── Certificates panel ───
+// Lists every Approved application for this company, with two controls:
+//   1. Generate / revoke offer letter (toggles offerLetterIssued)
+//   2. Approve / revoke completion certificate (toggles certificateIssued)
+// "Approve completion" is only enabled once the student has submitted the
+// internship's final task AND that submission has been approved by the company.
+function renderCertificatesPanel() {
+  const list  = document.getElementById("certs-list");
+  const empty = document.getElementById("certs-empty");
+  if (!list) return;
+
+  const approved = (appsCache || []).filter((a) => a.status === "Approved");
+  if (!approved.length) {
+    list.innerHTML = "";
+    if (empty) empty.style.display = "block";
+    return;
+  }
+  if (empty) empty.style.display = "none";
+
+  list.innerHTML = approved.map((app) => {
+    const intTasks = tasksCacheByInternship[app.internshipId] || [];
+    const finalTask = intTasks.find((t) => t.isFinal);
+    const finalApproved = !!finalTask && approvedSubsCache.some((s) =>
+      s.studentId === app.studentId &&
+      s.taskId === finalTask.id
+    );
+
+    const offerIssued = app.offerLetterIssued === true;
+    const certIssued  = app.certificateIssued === true;
+
+    const initials = (() => {
+      const n = (app.name || app.email || "").trim();
+      if (!n) return "?";
+      const parts = n.split(/[\s@]+/).filter(Boolean);
+      return parts.length >= 2
+        ? (parts[0][0] + parts[1][0]).toUpperCase()
+        : parts[0].slice(0, 2).toUpperCase();
+    })();
+
+    const displayName = app.name || app.email || ("Applicant " + (app.studentId || "").slice(0, 6));
+    const role = app.role || "Intern";
+
+    // completion approval copy
+    let completionHint = "";
+    let completionDisabled = !finalApproved && !certIssued;
+    if (!finalTask) {
+      completionHint = "No final task marked on this internship yet.";
+      completionDisabled = true;
+    } else if (!finalApproved && !certIssued) {
+      completionHint = "Student hasn't finished the final task yet.";
+    } else if (finalApproved && !certIssued) {
+      completionHint = "Final task approved — ready to issue.";
+    } else if (certIssued) {
+      completionHint = "Completion certificate issued.";
+    }
+
+    return (
+      '<div class="cert-row" data-app-id="' + esc(app.id) + '">' +
+        '<div class="cert-row__identity">' +
+          '<div class="cert-row__avatar">' + esc(initials) + '</div>' +
+          '<div>' +
+            '<div class="cert-row__name">' + esc(displayName) + '</div>' +
+            '<div class="cert-row__role">' + esc(role) + '</div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div class="cert-row__actions">' +
+          '<div class="cert-row__action' + (offerIssued ? ' cert-row__action--issued' : '') + '">' +
+            '<span class="cert-row__action-label">Offer Letter</span>' +
+            (offerIssued
+              ? '<div style="display:flex;gap:8px;align-items:center">' +
+                  '<span class="cert-row__issued-tag">✓ Issued</span>' +
+                  '<button class="cert-row__action-btn cert-row__action-btn--revoke" data-act="revoke-offer">Revoke</button>' +
+                '</div>'
+              : '<button class="cert-row__action-btn cert-row__action-btn--issue" data-act="issue-offer">Generate offer letter</button>'
+            ) +
+          '</div>' +
+
+          '<div class="cert-row__action' + (certIssued ? ' cert-row__action--issued' : '') + '">' +
+            '<span class="cert-row__action-label">Completion Certificate</span>' +
+            (certIssued
+              ? '<div style="display:flex;gap:8px;align-items:center">' +
+                  '<span class="cert-row__issued-tag">✓ Approved</span>' +
+                  '<button class="cert-row__action-btn cert-row__action-btn--revoke" data-act="revoke-completion">Revoke</button>' +
+                '</div>'
+              : '<div style="display:flex;flex-direction:column;gap:4px">' +
+                  '<button class="cert-row__action-btn cert-row__action-btn--issue" data-act="issue-completion"' +
+                    (completionDisabled ? ' disabled' : '') + '>Approve completion</button>' +
+                  '<span class="cert-row__hint">' + esc(completionHint) + '</span>' +
+                '</div>'
+            ) +
+          '</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join("");
+
+  list.querySelectorAll(".cert-row").forEach((row) => {
+    const appId = row.getAttribute("data-app-id");
+    row.querySelectorAll("[data-act]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const act = btn.getAttribute("data-act");
+        try {
+          if (act === "issue-offer") {
+            await updateDoc(doc(db, "applications", appId), {
+              offerLetterIssued: true,
+              offerLetterIssuedAt: serverTimestamp(),
+            });
+          } else if (act === "revoke-offer") {
+            await updateDoc(doc(db, "applications", appId), {
+              offerLetterIssued: false,
+            });
+          } else if (act === "issue-completion") {
+            await updateDoc(doc(db, "applications", appId), {
+              certificateIssued: true,
+              certificateIssuedAt: serverTimestamp(),
+            });
+          } else if (act === "revoke-completion") {
+            await updateDoc(doc(db, "applications", appId), {
+              certificateIssued: false,
+            });
+          }
+        } catch (e) {
+          console.error("certificate action failed:", e);
+          alert("Could not save — please try again.");
+        }
+      });
+    });
+  });
+}
+
 function renderInternships(list) {
   var grid  = document.getElementById("internships-grid");
   var empty = document.getElementById("internships-empty");
+  var pager = document.getElementById("internships-pager");
+  var pagerInfo = document.getElementById("int-pager-info");
+  var pagerPrev = document.getElementById("int-pager-prev");
+  var pagerNext = document.getElementById("int-pager-next");
   if (!grid) return;
   grid.innerHTML = "";
-  if (!list.length) { if (empty) empty.style.display = "block"; return; }
+  if (!list.length) {
+    if (empty) empty.style.display = "block";
+    if (pager) pager.style.display = "none";
+    return;
+  }
   if (empty) empty.style.display = "none";
 
-  list.forEach(function (item) {
+  var totalPages = Math.max(1, Math.ceil(list.length / INT_PER_PAGE));
+  if (intCurrentPage > totalPages) intCurrentPage = totalPages;
+  if (intCurrentPage < 1) intCurrentPage = 1;
+  var startIdx = (intCurrentPage - 1) * INT_PER_PAGE;
+  var pageSlice = list.slice(startIdx, startIdx + INT_PER_PAGE);
+
+  if (pager) {
+    pager.style.display = totalPages > 1 ? "flex" : "none";
+    if (pagerInfo) pagerInfo.textContent = "Page " + intCurrentPage + " of " + totalPages;
+    if (pagerPrev) pagerPrev.disabled = intCurrentPage <= 1;
+    if (pagerNext) pagerNext.disabled = intCurrentPage >= totalPages;
+  }
+
+  pageSlice.forEach(function (item) {
     var cnt = appsCache.filter(function (a) {
       return (a.internshipId === item.id) ||
              (a.role || "").toLowerCase() === (item.title || "").toLowerCase();
@@ -979,6 +1234,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (name === "dashboard")    renderDashboard();
     if (name === "applications") renderApps();
     if (name === "internships")  loadInternships();
+    if (name === "certificates") renderCertificatesPanel();
   }
 
   document.querySelectorAll(".nav-item[data-section]").forEach(function (l) {
@@ -990,6 +1246,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // auth guard
   onAuthStateChanged(auth, async function (user) {
+    if (sessionStorage.getItem("guestRole")) return;
     if (!user) { window.location.href = "login.html"; return; }
 
     loadInternships();
@@ -999,28 +1256,126 @@ document.addEventListener("DOMContentLoaded", function () {
       where("companyId", "==", user.uid)
     );
 
-    onSnapshot(appsQuery, async function (snap) {
-      var directApps = snap.docs.map(function (d) { return { id: d.id, ...d.data() }; });
-
-const appsQuery = query(
-  collection(db, "applications"),
-  where("companyId", "==", user.uid)
-);
-
-onSnapshot(appsQuery, function (snap) {
-  appsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  renderApps();
-  renderDashboard();
-});
-
-      appsCache = directApps;
+    onSnapshot(appsQuery, function (snap) {
+      appsCache = snap.docs.map(function (d) { return { id: d.id, ...d.data() }; });
       renderApps();
       renderDashboard();
       renderInternships(internshipsCache);
+      renderCertificatesPanel();
     }, function (err) {
       console.error("Applications listener error:", err);
     });
+
+    // Live-watch approved submissions for final tasks — used by the
+    // certificates panel to know when "Approve completion" becomes enabled.
+    const subsQ = query(
+      collection(db, "taskSubmissions"),
+      where("companyId", "==", user.uid)
+    );
+    onSnapshot(subsQ, function (snap) {
+      approvedSubsCache = snap.docs
+        .map(function (d) { return { id: d.id, ...d.data() }; })
+        .filter(function (s) {
+          return s.feedback && s.feedback.status === "approved";
+        });
+      renderCertificatesPanel();
+    }, function (err) {
+      console.warn("Submissions listener error:", err);
+    });
+
+    // Live-watch all this company's internship tasks so we can check which
+    // of them is the `isFinal` task per internship.
+    const tasksQ = query(
+      collection(db, "tasks"),
+      where("companyId", "==", user.uid)
+    );
+    onSnapshot(tasksQ, function (snap) {
+      tasksCacheByInternship = {};
+      snap.forEach(function (d) {
+        const t = { id: d.id, ...d.data() };
+        if (!t.internshipId) return;
+        (tasksCacheByInternship[t.internshipId] = tasksCacheByInternship[t.internshipId] || []).push(t);
+      });
+      renderCertificatesPanel();
+    }, function (err) {
+      console.warn("Tasks listener error:", err);
+    });
+
+    // verification gate: live-watch the company doc
+    onSnapshot(doc(db, "companies", user.uid), function (snap) {
+      applyVerificationGate(snap.exists() ? snap.data() : {});
+    }, function (err) {
+      console.error("Company doc listener error:", err);
+    });
   });
+
+  function applyVerificationGate(company) {
+    var banner   = document.getElementById("verify-banner");
+    var titleEl  = document.getElementById("verify-banner-title");
+    var msgEl    = document.getElementById("verify-banner-msg");
+    var actionEl = document.getElementById("verify-banner-action");
+    var addBtn   = document.getElementById("add-internship-btn");
+
+    var verified = company.verified === true;
+    var rejected = company.rejected === true;
+
+    if (addBtn) {
+      addBtn.classList.toggle("is-locked", !verified);
+      addBtn.setAttribute("aria-disabled", verified ? "false" : "true");
+      addBtn.title = verified ? "" : "Awaiting admin verification";
+    }
+
+    if (!banner) return;
+    if (verified) {
+      banner.style.display = "none";
+      banner.classList.remove("verify-banner--rejected", "verify-banner--pending");
+      return;
+    }
+
+    banner.style.display = "flex";
+    if (rejected) {
+      banner.classList.add("verify-banner--rejected");
+      banner.classList.remove("verify-banner--pending");
+      if (titleEl) titleEl.textContent = "Verification rejected";
+      if (msgEl) {
+        var reason = String(company.rejectReason || "").trim();
+        msgEl.textContent = reason
+          ? "Admin rejected your verification — reason: " + reason + ". Update your profile and request again."
+          : "Admin rejected your verification. Update your profile and request again.";
+      }
+      if (actionEl) { actionEl.textContent = "Request again"; actionEl.disabled = false; }
+    } else {
+      banner.classList.add("verify-banner--pending");
+      banner.classList.remove("verify-banner--rejected");
+      if (titleEl) titleEl.textContent = "Verification required";
+      if (msgEl)   msgEl.textContent   = "Your company account is awaiting admin approval. You can post internships once verified. An admin will review shortly.";
+      if (actionEl) {
+        actionEl.textContent = company.verifyRequestedAt ? "Verification requested ✓" : "Request verification";
+        actionEl.disabled = !!company.verifyRequestedAt;
+      }
+    }
+
+    if (actionEl && !actionEl.dataset.wired) {
+      actionEl.dataset.wired = "1";
+      actionEl.addEventListener("click", async function () {
+        var u = auth.currentUser;
+        if (!u) return;
+        actionEl.disabled = true;
+        actionEl.textContent = "Sending…";
+        try {
+          await updateDoc(doc(db, "companies", u.uid), {
+            rejected: false,
+            rejectReason: "",
+            verifyRequestedAt: serverTimestamp(),
+          });
+        } catch (err) {
+          console.error("Failed to request verification:", err);
+          actionEl.disabled = false;
+          actionEl.textContent = "Request verification";
+        }
+      });
+    }
+  }
 
   // settings modal
   var setModal = document.getElementById("companySettingsModal");
@@ -1108,6 +1463,8 @@ onSnapshot(appsQuery, function (snap) {
 
   wire("companyLogoutBtn", async function () {
     if (!confirm("Sign out?")) return;
+    try { sessionStorage.removeItem("guestRole"); } catch (e) {}
+    try { sessionStorage.removeItem("guestGreetingShown"); } catch (e) {}
     try {
       const { signOut } = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js");
       await signOut(auth);
@@ -1126,22 +1483,77 @@ onSnapshot(appsQuery, function (snap) {
       document.querySelectorAll(".ftab").forEach(function (x) { x.classList.remove("active"); });
       b.classList.add("active");
       currentFilter = b.getAttribute("data-filter");
+      currentPage = 1;
       renderApps();
     });
   });
 
   var srch = document.getElementById("app-search");
-  if (srch) srch.addEventListener("input", function () { searchQuery = srch.value.trim(); renderApps(); });
+  if (srch) srch.addEventListener("input", function () {
+    searchQuery = srch.value.trim();
+    currentPage = 1;
+    renderApps();
+  });
 
   var sortEl = document.getElementById("app-sort");
   if (sortEl) sortEl.addEventListener("change", function () {
     currentSort = sortEl.value || "newest";
+    currentPage = 1;
     renderApps();
+  });
+
+  // pagination controls
+  var pagerPrev = document.getElementById("pager-prev");
+  var pagerNext = document.getElementById("pager-next");
+  if (pagerPrev) pagerPrev.addEventListener("click", function () {
+    if (currentPage > 1) {
+      currentPage -= 1;
+      renderApps();
+      var grid = document.getElementById("apps");
+      if (grid) grid.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
+  if (pagerNext) pagerNext.addEventListener("click", function () {
+    var total = Math.max(1, Math.ceil(filteredCount / APPS_PER_PAGE));
+    if (currentPage < total) {
+      currentPage += 1;
+      renderApps();
+      var grid = document.getElementById("apps");
+      if (grid) grid.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
+
+  // internships pagination controls
+  var intPagerPrev = document.getElementById("int-pager-prev");
+  var intPagerNext = document.getElementById("int-pager-next");
+  if (intPagerPrev) intPagerPrev.addEventListener("click", function () {
+    if (intCurrentPage > 1) {
+      intCurrentPage -= 1;
+      renderInternships(internshipsCache);
+      var grid = document.getElementById("internships-grid");
+      if (grid) grid.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
+  if (intPagerNext) intPagerNext.addEventListener("click", function () {
+    var total = Math.max(1, Math.ceil(internshipsCache.length / INT_PER_PAGE));
+    if (intCurrentPage < total) {
+      intCurrentPage += 1;
+      renderInternships(internshipsCache);
+      var grid = document.getElementById("internships-grid");
+      if (grid) grid.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   });
 
   // internship modal
   var addBtn = document.getElementById("add-internship-btn");
-  if (addBtn) addBtn.addEventListener("click", function () { openIntModal(null); });
+  if (addBtn) addBtn.addEventListener("click", async function () {
+    if (addBtn.classList.contains("is-locked")) {
+      var banner = document.getElementById("verify-banner");
+      if (banner) banner.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    openIntModal(null);
+  });
 
   var cancelBtn  = document.getElementById("modal-cancel");
   if (cancelBtn)  cancelBtn.addEventListener("click", closeIntModal);
@@ -1281,9 +1693,23 @@ onSnapshot(appsQuery, function (snap) {
       orderBy("createdAt", "desc"),
     );
 
+    const _seenCompanyNotifIds = new Set();
+    let _seenCoInit = false;
+
     onSnapshot(q, (snap) => {
       const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       const unread = items.filter((n) => !n.isRead).length;
+
+      const currentIds = items.map((n) => n.id);
+      if (_seenCoInit) {
+        const fresh = currentIds.filter((id) => !_seenCompanyNotifIds.has(id));
+        if (fresh.length && typeof window.playNotifPing === "function") {
+          window.playNotifPing();
+        }
+      }
+      _seenCompanyNotifIds.clear();
+      currentIds.forEach((id) => _seenCompanyNotifIds.add(id));
+      _seenCoInit = true;
 
       if (unread > 0) {
         badge.hidden = false;

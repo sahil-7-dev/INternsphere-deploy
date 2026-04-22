@@ -24,6 +24,8 @@ let tasksCache = [];
 let selectedInternshipId = "";
 let editingTaskId = null;
 let tasksUnsub = null;
+let taskCurrentPage = 1;
+const TASKS_PER_PAGE = 9;
 
 function $(id) { return document.getElementById(id); }
 
@@ -51,12 +53,17 @@ function renderTasks() {
   const grid = $("tasks-grid");
   const empty = $("tasks-empty");
   const hint = $("tasks-hint");
+  const pager = $("tasks-pager");
+  const pagerInfo = $("task-pager-info");
+  const pagerPrev = $("task-pager-prev");
+  const pagerNext = $("task-pager-next");
   if (!grid) return;
 
   if (!selectedInternshipId) {
     grid.innerHTML = "";
     if (empty) empty.style.display = "none";
     if (hint) hint.style.display = "block";
+    if (pager) pager.style.display = "none";
     return;
   }
 
@@ -65,14 +72,27 @@ function renderTasks() {
   if (!tasksCache.length) {
     grid.innerHTML = "";
     if (empty) empty.style.display = "block";
+    if (pager) pager.style.display = "none";
     return;
   }
 
   if (empty) empty.style.display = "none";
 
-  grid.innerHTML = tasksCache
-    .slice()
-    .sort((a, b) => (a.order || 0) - (b.order || 0))
+  const sorted = tasksCache.slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+  const totalPages = Math.max(1, Math.ceil(sorted.length / TASKS_PER_PAGE));
+  if (taskCurrentPage > totalPages) taskCurrentPage = totalPages;
+  if (taskCurrentPage < 1) taskCurrentPage = 1;
+  const startIdx = (taskCurrentPage - 1) * TASKS_PER_PAGE;
+  const pageSlice = sorted.slice(startIdx, startIdx + TASKS_PER_PAGE);
+
+  if (pager) {
+    pager.style.display = totalPages > 1 ? "flex" : "none";
+    if (pagerInfo) pagerInfo.textContent = `Page ${taskCurrentPage} of ${totalPages}`;
+    if (pagerPrev) pagerPrev.disabled = taskCurrentPage <= 1;
+    if (pagerNext) pagerNext.disabled = taskCurrentPage >= totalPages;
+  }
+
+  grid.innerHTML = pageSlice
     .map((t) => {
       const due = t.dueDate || "—";
       const finalRingStyle = t.isFinal
@@ -82,25 +102,25 @@ function renderTasks() {
         ? 'background:linear-gradient(135deg,#ec4899,#f59e0b);'
         : 'background:linear-gradient(135deg,#7c6bff,#a855f7);';
       return `
-        <div class="app-card" data-id="${t.id}" style="${finalRingStyle}">
+        <div class="app-card task-card" data-id="${t.id}" style="${finalRingStyle}">
           <div class="ac-top">
             <div class="ac-left">
               <div class="ac-avatar" style="${avatarGradient}color:#fff">${t.isFinal ? "🏁" : (t.order || 1)}</div>
-              <div>
+              <div class="ac-left-text">
                 <div class="ac-name">${esc(t.title)}</div>
                 <div class="ac-role">${esc(t.description || "No description").slice(0, 80)}${(t.description || "").length > 80 ? "…" : ""}</div>
               </div>
             </div>
-            <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
-              ${t.isFinal ? '<span class="skill-tag" style="background:linear-gradient(135deg,rgba(236,72,153,0.2),rgba(245,158,11,0.16));color:#ec4899;border:1px solid rgba(236,72,153,0.4);font-weight:800;letter-spacing:0.05em">🏁 FINAL TASK</span>' : ''}
-              <span class="skill-tag">Due ${esc(due)}</span>
-              ${t.requirePdf ? '<span class="skill-tag" style="background:rgba(124,107,255,0.14);color:#a855f7">📎 PDF required</span>' : ''}
+            <div class="ac-tags">
+              ${t.isFinal ? '<span class="skill-tag task-tag--final">🏁 FINAL</span>' : ''}
+              <span class="skill-tag task-tag--due">Due ${esc(due)}</span>
+              ${t.requirePdf ? '<span class="skill-tag task-tag--pdf">📎 PDF</span>' : ''}
             </div>
           </div>
-          <div class="ac-actions">
+          <div class="ac-actions task-actions">
             <button class="btn-approve" data-act="edit">Edit</button>
             <button class="btn-reject" data-act="delete">Delete</button>
-            <button class="btn-ghost" data-act="submissions" style="background:rgba(124,107,255,0.12);color:#a855f7;border:1px solid rgba(124,107,255,0.25);padding:6px 12px;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer">View Submissions</button>
+            <button class="btn-submissions" data-act="submissions">Submissions</button>
           </div>
         </div>`;
     })
@@ -280,10 +300,28 @@ document.addEventListener("DOMContentLoaded", () => {
 
   wire("task-internship-select", (e) => {
     selectedInternshipId = e.target.value;
+    taskCurrentPage = 1;
     const btn = $("open-task-modal-btn");
     if (btn) btn.disabled = !selectedInternshipId;
     subscribeTasks();
   }, "change");
+
+  // tasks pagination
+  wire("task-pager-prev", () => {
+    if (taskCurrentPage > 1) {
+      taskCurrentPage -= 1;
+      renderTasks();
+      $("tasks-grid")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
+  wire("task-pager-next", () => {
+    const total = Math.max(1, Math.ceil(tasksCache.length / TASKS_PER_PAGE));
+    if (taskCurrentPage < total) {
+      taskCurrentPage += 1;
+      renderTasks();
+      $("tasks-grid")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
 
   wire("open-task-modal-btn", () => openTaskModal(null));
   wire("task-modal-cancel", closeTaskModal);

@@ -44,6 +44,8 @@ let tasks = [];
 let submissions = {}; // { taskId: submissionDoc }
 let activeTaskId = null;
 let pendingPdf = null; // { name, size, dataUrl } for the currently-active task
+let approvedAppId = null;            // firestore id of the approved application
+let certificateIssued = false;       // company-flipped flag gating completion cert
 
 function isLocked(sub) {
   if (!sub) return false;
@@ -97,6 +99,8 @@ async function bootstrapForStudent(user) {
   const appDoc = appsSnap.docs[0];
   const app = appDoc.data();
   internshipId = app.internshipId;
+  approvedAppId = appDoc.id;
+  certificateIssued = app.certificateIssued === true;
 
   try {
     const intSnap = await getDoc(doc(db, "internships", internshipId));
@@ -113,6 +117,18 @@ async function bootstrapForStudent(user) {
   subscribeToTasks();
   // Subscribe to submissions
   subscribeToSubmissions();
+  // Live-watch the application doc so certificateIssued updates without a reload
+  subscribeToApprovedApp();
+}
+
+function subscribeToApprovedApp() {
+  if (!approvedAppId) return;
+  onSnapshot(doc(db, "applications", approvedAppId), (snap) => {
+    if (!snap.exists()) return;
+    certificateIssued = snap.data().certificateIssued === true;
+    // if the student is already on the completion modal, refresh its controls
+    refreshCompletionModal();
+  });
 }
 
 function subscribeToTasks() {
@@ -386,16 +402,14 @@ function maybeShowCompletion() {
   if (!tasks.length) return;
 
   const finalTask = tasks.find((t) => t.isFinal);
-
-  //  - A company-flagged final task exists
   const allLocked = tasks.every((t) => isLocked(submissions[t.id]));
   const finalLocked = !!finalTask && isLocked(submissions[finalTask.id]);
-  const canComplete = allLocked && !!finalTask && finalLocked;
+  const finished = allLocked && !!finalTask && finalLocked;
 
   renderFinalTaskBanner(finalTask);
 
   if (
-    canComplete &&
+    finished &&
     completionModal &&
     !completionModal.classList.contains("is-open")
   ) {
@@ -403,8 +417,32 @@ function maybeShowCompletion() {
       sessionStorage.setItem("wr_shown_complete", "1");
       completionModal.classList.add("is-open");
     }
-  } else if (!canComplete) {
+  } else if (!finished) {
     sessionStorage.removeItem("wr_shown_complete");
+  }
+
+  refreshCompletionModal();
+}
+
+// Keeps the completion modal's button/copy in sync with whether the company
+// has approved the certificate. Called on certificateIssued changes and
+// after every task/submission update.
+function refreshCompletionModal() {
+  if (!completionModal) return;
+  const btn = document.getElementById("downloadCertBtn");
+  const hint = document.getElementById("completionHint");
+  if (!btn) return;
+
+  if (certificateIssued) {
+    btn.disabled = false;
+    btn.style.opacity = "";
+    btn.textContent = "⬇ Download Certificate";
+    if (hint) hint.textContent = "Your company has approved — certificate ready to download.";
+  } else {
+    btn.disabled = true;
+    btn.style.opacity = "0.55";
+    btn.textContent = "🔒 Waiting for company approval";
+    if (hint) hint.textContent = "You've finished every task. Your company will approve your completion shortly — the certificate will unlock here the moment they do.";
   }
 }
 
@@ -902,171 +940,22 @@ document.getElementById("completionStay")?.addEventListener("click", () => {
   completionModal?.classList.remove("is-open");
 });
 document.getElementById("downloadCertBtn")?.addEventListener("click", () => {
+  if (!certificateIssued) return;
   downloadCertificate();
 });
 
 function downloadCertificate() {
   const btn = document.getElementById("downloadCertBtn");
-  if (btn) { btn.disabled = true; btn.textContent = "Preparing…"; }
-
-  const W = 1600, H = 1130;            // ~A4 landscape at 192 dpi
-  const canvas = document.createElement("canvas");
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext("2d");
-
-  // ----- background -----
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, W, H);
-  // soft violet → magenta radial corners
-  const g1 = ctx.createRadialGradient(0, 0, 0, 0, 0, 700);
-  g1.addColorStop(0, "rgba(124, 107, 255, 0.14)");
-  g1.addColorStop(1, "rgba(124, 107, 255, 0)");
-  ctx.fillStyle = g1;
-  ctx.fillRect(0, 0, W, H);
-  const g2 = ctx.createRadialGradient(W, H, 0, W, H, 700);
-  g2.addColorStop(0, "rgba(236, 72, 153, 0.12)");
-  g2.addColorStop(1, "rgba(236, 72, 153, 0)");
-  ctx.fillStyle = g2;
-  ctx.fillRect(0, 0, W, H);
-
-  // outer frame
-  ctx.strokeStyle = "rgba(124, 107, 255, 0.55)";
-  ctx.lineWidth = 3;
-  ctx.strokeRect(50, 50, W - 100, H - 100);
-  // thin inner hairline
-  ctx.strokeStyle = "rgba(15, 23, 42, 0.10)";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(72, 72, W - 144, H - 144);
-
-  const scan = ctx.createLinearGradient(0, 0, W, 0);
-  scan.addColorStop(0,    "rgba(124, 107, 255, 0)");
-  scan.addColorStop(0.35, "rgba(124, 107, 255, 0.85)");
-  scan.addColorStop(0.65, "rgba(236, 72, 153, 0.85)");
-  scan.addColorStop(1,    "rgba(236, 72, 153, 0)");
-  ctx.fillStyle = scan;
-  ctx.fillRect(50, 50, W - 100, 2);
-
-  // ----- helpers to draw text centered -----
-  const cx = W / 2;
-  function drawText(text, y, opts = {}) {
-    const { size = 28, weight = "400", color = "#0f172a", tracking = 0 } = opts;
-    ctx.fillStyle = color;
-    ctx.font = `${weight} ${size}px "Inter", "Helvetica Neue", Arial, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "alphabetic";
-    if (tracking) {
-      const chars = String(text).split("");
-      const widths = chars.map((c) => ctx.measureText(c).width);
-      const total = widths.reduce((a, b) => a + b, 0) + tracking * (chars.length - 1);
-      let x = cx - total / 2;
-      chars.forEach((c, i) => {
-        ctx.textAlign = "left";
-        ctx.fillText(c, x, y);
-        x += widths[i] + tracking;
-      });
-      ctx.textAlign = "center";
-    } else {
-      ctx.fillText(text, cx, y);
-    }
+  if (typeof window.downloadCompletionCertificate !== "function") {
+    console.warn("certificate.js not loaded");
+    return;
   }
-
-  const dateStr = new Date().toLocaleDateString(undefined, {
-    year: "numeric", month: "long", day: "numeric",
+  window.downloadCompletionCertificate({
+    studentName,
+    internshipTitle,
+    internshipCompany,
+    buttonEl: btn,
   });
-
-  function paint(logoImg) {
-    if (logoImg) {
-      const maxH = 120;
-      const ratio = logoImg.width / logoImg.height;
-      const h = maxH;
-      const w = h * ratio;
-      ctx.drawImage(logoImg, cx - w / 2, 140, w, h);
-    }
-
-    drawText("CERTIFICATE OF COMPLETION", 330, {
-      size: 18, weight: "800", color: "#6d28d9", tracking: 6,
-    });
-
-    drawText("This certificate is proudly presented to", 400, {
-      size: 22, color: "rgba(15,23,42,0.62)",
-    });
-
-    drawText(studentName || "Intern", 500, {
-      size: 72, weight: "800", color: "#0f172a",
-    });
-    // underline accent
-    ctx.strokeStyle = "rgba(124, 107, 255, 0.55)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(cx - 240, 526);
-    ctx.lineTo(cx + 240, 526);
-    ctx.stroke();
-
-    drawText("for successfully completing the internship", 590, {
-      size: 24, color: "rgba(15,23,42,0.72)",
-    });
-
-    drawText(internshipTitle || "Virtual Internship", 660, {
-      size: 40, weight: "800", color: "#0f172a",
-    });
-
-    if (internshipCompany) {
-      drawText(`at ${internshipCompany}`, 720, {
-        size: 28, weight: "600", color: "rgba(15,23,42,0.78)",
-      });
-    }
-
-    drawText(
-      "All assigned tasks were submitted and reviewed through the InternSphere Virtual Workroom.",
-      830,
-      { size: 18, color: "rgba(15,23,42,0.55)" },
-    );
-
-    ctx.strokeStyle = "rgba(15, 23, 42, 0.28)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(180, 950);  ctx.lineTo(480, 950);
-    ctx.moveTo(W - 480, 950); ctx.lineTo(W - 180, 950);
-    ctx.stroke();
-
-    ctx.fillStyle = "#0f172a";
-    ctx.font = "600 22px 'Inter', sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(dateStr, 330, 985);
-    ctx.fillText("InternSphere", W - 330, 985);
-
-    ctx.fillStyle = "rgba(15, 23, 42, 0.55)";
-    ctx.font = "500 16px 'Inter', sans-serif";
-    ctx.fillText("Issued on", 330, 1010);
-    ctx.fillText("Virtual Internship Portal", W - 330, 1010);
-
-    // ----- trigger download -----
-    canvas.toBlob((blob) => {
-      if (!blob) { resetBtn(); return; }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      const safeName = (studentName || "intern").replace(/[^a-z0-9]+/gi, "_");
-      a.href = url;
-      a.download = `InternSphere_Certificate_${safeName}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
-      resetBtn();
-    }, "image/png");
-  }
-
-  function resetBtn() {
-    if (!btn) return;
-    btn.disabled = false;
-    btn.textContent = "⬇ Download Certificate";
-  }
-
-  const logo = new Image();
-  logo.onload  = () => paint(logo);
-  logo.onerror = () => paint(null);   // still render the certificate text-only
-  logo.src = "assets/images/Internsphere logo.png";
 }
 
 // Keyboard shortcuts
@@ -1090,6 +979,7 @@ document.addEventListener("keydown", (e) => {
 
 //   BOOT
 onAuthStateChanged(auth, (user) => {
+  if (sessionStorage.getItem("guestRole")) { showNoInternship(); return; }
   if (!user) {
     window.location.href = "login.html";
     return;

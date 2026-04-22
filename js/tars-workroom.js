@@ -154,12 +154,20 @@ function hideEmptyState() {
 function showEmptyStateIfNeeded() {
   const consoleBox = $("console");
   if (!consoleBox) return;
-  if (consoleBox.querySelectorAll(".msg").length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "console-empty";
-    empty.textContent = "Ask TARS anything — or try 'fix grammar', 'make this formal', 'draft a starter'.";
-    consoleBox.appendChild(empty);
+  if (consoleBox.querySelectorAll(".msg").length > 0) return;
+
+  const TEXT = "Ask TARS anything — or try 'fix grammar', 'make this formal', 'draft a starter'.";
+  let empty = consoleBox.querySelector(".console-empty");
+  if (empty) {
+    // Existing empty-state was created by virtualworkroom.js — update its text
+    // instead of appending a duplicate.
+    empty.textContent = TEXT;
+    return;
   }
+  empty = document.createElement("div");
+  empty.className = "console-empty";
+  empty.textContent = TEXT;
+  consoleBox.appendChild(empty);
 }
 
 function appendMsg(text, from = "bot", { typed = false } = {}) {

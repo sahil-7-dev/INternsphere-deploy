@@ -50,18 +50,45 @@ function saveCvSummary(appId, size, obj) {
 
 // system prompt
 function buildSystemPrompt() {
+  const now = new Date();
+  const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
+
+  const openRoles   = internships.filter((i) => (i.status || 'Open') === 'Open');
+  const pending     = apps.filter((a) => (a.status || 'Pending') === 'Pending');
+  const approved    = apps.filter((a) => a.status === 'Approved');
+  const shortlisted = apps.filter((a) => a.status === 'Shortlisted');
+  const rejected    = apps.filter((a) => a.status === 'Rejected');
+  const thisWeek    = apps.filter((a) => { const d = humanDateFromApp(a); return d && d >= weekAgo; });
+
+  const rolesSummary = openRoles.map((r) => {
+    const count = apps.filter((a) => a.internshipId === r.id).length;
+    return '  ��� ' + r.title + ' (' + count + ' applicant' + (count === 1 ? '' : 's') + ', ' + (r.location || '���') + ')';
+  }).join('
+') || '  (none)';
+
   const state = [
-    companyName && `Company: ${companyName}`,
-    internships.length !== undefined && `Open internships: ${internships.filter((i) => (i.status || "Open") === "Open").length} / total ${internships.length}`,
-    apps.length !== undefined && `Total applications received: ${apps.length}`,
-  ].filter(Boolean).join("\n");
+    companyName && ('Company: ' + companyName),
+    'Today: ' + now.toDateString(),
+    'Open roles: ' + openRoles.length + ' / total posted: ' + internships.length,
+    openRoles.length > 0 ? ('Open roles detail:
+' + rolesSummary) : null,
+    'Total applications: ' + apps.length,
+    '  ��� Pending: ' + pending.length,
+    '  ��� Shortlisted: ' + shortlisted.length,
+    '  ��� Approved: ' + approved.length,
+    '  ��� Rejected: ' + rejected.length,
+    'Applications this week: ' + thisWeek.length,
+  ].filter(Boolean).join('
+');
 
   const pageLines = [
-    "User is a company recruiter on the InternSphere dashboard.",
-    "Keep responses actionable and numerical when possible.",
-    "When ranking candidates, include a brief reasoning per candidate.",
-    "Always label AI-suggested ranking as non-authoritative — the recruiter makes the final call.",
-  ].join("\n");
+    'User is a company recruiter on the InternSphere dashboard.',
+    'The LIVE HIRING DATA above is fetched fresh from the database ��� use these exact numbers when answering questions about applications or roles.',
+    'Keep responses actionable and numerical when possible.',
+    'When ranking candidates, include a brief reasoning per candidate.',
+    'Always label AI-suggested ranking as non-authoritative ��� the recruiter makes the final call.',
+  ].join('
+');
 
   return composeSystemPrompt({
     studentName: companyName,
@@ -69,7 +96,6 @@ function buildSystemPrompt() {
     pageContext: pageLines,
   });
 }
-
 // data loading
 async function refreshData(uid) {
   try {
@@ -123,7 +149,7 @@ function showError(msg) {
   el.className = "tars-chat-msg tars-chat-msg-bot";
   el.style.borderColor = "rgba(239,68,68,0.35)";
   el.style.color = "#fca5a5";
-  el.textContent = "⚠ " + msg;
+  el.textContent = "��� " + msg;
   thread.appendChild(el);
   thread.scrollTop = thread.scrollHeight;
 }
@@ -138,14 +164,14 @@ function closeChat() {
 
 // dropdown menu
 const ROOT_ACTIONS = [
-  { id: "today",     ico: "📊", label: "Today's applications",                sub: "count + breakdown by role" },
-  { id: "weekly",    ico: "📈", label: "This week's hiring snapshot",          sub: "totals by status" },
-  { id: "stale",     ico: "⏰", label: "Pending reviews over 48 hours",        sub: "applications needing action" },
-  { id: "recent",    ico: "🆕", label: "Recent applicants (last 10)",          sub: "across all roles" },
-  { id: "skill",     ico: "🎯", label: "Skill coverage for a role",            sub: "pick a role → see skills vs required", multi: true },
-  { id: "promising", ico: "⭐", label: "Find promising applicants",            sub: "pick a role → AI ranks applicants",    multi: true },
-  { id: "interview", ico: "🤝", label: "Who to interview next",                sub: "top 3 pending, any role" },
-  { id: "custom",    ico: "✎",  label: "Custom message",                      sub: "ask me anything", custom: true },
+  { id: "today",     ico: "����", label: "Today's applications",                sub: "count + breakdown by role" },
+  { id: "weekly",    ico: "����", label: "This week's hiring snapshot",          sub: "totals by status" },
+  { id: "stale",     ico: "���", label: "Pending reviews over 48 hours",        sub: "applications needing action" },
+  { id: "recent",    ico: "����", label: "Recent applicants (last 10)",          sub: "across all roles" },
+  { id: "skill",     ico: "����", label: "Skill coverage for a role",            sub: "pick a role ��� see skills vs required", multi: true },
+  { id: "promising", ico: "���", label: "Find promising applicants",            sub: "pick a role ��� AI ranks applicants",    multi: true },
+  { id: "interview", ico: "����", label: "Who to interview next",                sub: "top 3 pending, any role" },
+  { id: "custom",    ico: "���",  label: "Custom message",                      sub: "ask me anything", custom: true },
 ];
 
 function renderRootMenu() {
@@ -154,7 +180,7 @@ function renderRootMenu() {
   menuMode = "root";
   menuPendingAction = null;
   sugg.innerHTML =
-    `<div class="tars-suggest-title"><span class="tars-suggest-spark">✦</span> Quick actions</div>` +
+    `<div class="tars-suggest-title"><span class="tars-suggest-spark">���</span> Quick actions</div>` +
     ROOT_ACTIONS.map((a) => `
       <button type="button" class="tars-suggest-item ${a.custom ? "tars-suggest-custom" : ""}" data-action="${a.id}">
         <span class="tars-suggest-ico">${a.ico}</span>
@@ -176,17 +202,17 @@ function renderRoleMenu(action) {
   const roles = internships.slice().sort((a, b) => (a.status === "Open" ? -1 : 1));
   if (!roles.length) {
     sugg.innerHTML = `
-      <div class="tars-suggest-title"><span class="tars-suggest-spark">✦</span> Pick a role</div>
+      <div class="tars-suggest-title"><span class="tars-suggest-spark">���</span> Pick a role</div>
       <div style="padding:14px 10px;color:rgba(255,255,255,0.55);font-size:0.85rem">
         You haven't posted any roles yet.
       </div>
       <button type="button" class="tars-suggest-item tars-suggest-custom" data-back="1">
-        <span class="tars-suggest-ico">←</span> Back
+        <span class="tars-suggest-ico">���</span> Back
       </button>
     `;
   } else {
     sugg.innerHTML =
-      `<div class="tars-suggest-title"><span class="tars-suggest-spark">✦</span> Pick a role</div>` +
+      `<div class="tars-suggest-title"><span class="tars-suggest-spark">���</span> Pick a role</div>` +
       roles.map((r) => {
         const count = apps.filter((a) => a.internshipId === r.id).length;
         const statusTag = (r.status && r.status !== "Open")
@@ -194,15 +220,15 @@ function renderRoleMenu(action) {
           : "";
         return `
           <button type="button" class="tars-suggest-item" data-role="${esc(r.id)}">
-            <span class="tars-suggest-ico">📌</span>
+            <span class="tars-suggest-ico">����</span>
             <span style="display:flex;flex-direction:column;gap:2px;min-width:0;flex:1">
               <span style="font-weight:700">${esc(r.title)}${statusTag}</span>
-              <span style="font-size:0.7rem;opacity:0.65">${count} applicant${count === 1 ? "" : "s"} · ${esc(r.location || "—")}</span>
+              <span style="font-size:0.7rem;opacity:0.65">${count} applicant${count === 1 ? "" : "s"} �� ${esc(r.location || "���")}</span>
             </span>
           </button>`;
       }).join("") +
       `<button type="button" class="tars-suggest-item tars-suggest-custom" data-back="1">
-        <span class="tars-suggest-ico">←</span> Back
+        <span class="tars-suggest-ico">���</span> Back
       </button>`;
   }
   wireMenuClicks();
@@ -254,6 +280,22 @@ function showSuggest() { $("coTarsSuggest")?.classList.remove("is-hidden"); }
 function hideSuggest() { $("coTarsSuggest")?.classList.add("is-hidden"); }
 
 // actions
+// Returns a Date from an application object, preferring the numeric
+// appliedAtMs timestamp (reliable) over the locale-string appliedAt field
+// (unreliable across locales). Falls back gracefully.
+function humanDateFromApp(app) {
+  if (!app) return null;
+  if (typeof app.appliedAtMs === "number" && !isNaN(app.appliedAtMs)) {
+    return new Date(app.appliedAtMs);
+  }
+  if (app.appliedAt) {
+    const d = new Date(app.appliedAt);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return null;
+}
+
+// Legacy string-only variant (kept for callers that pass raw strings)
 function humanDateString(str) {
   if (!str) return null;
   const d = new Date(str);
@@ -278,11 +320,11 @@ async function executeAction(id, opts = {}) {
 function actionToday() {
   const now = new Date();
   const today = apps.filter((a) => {
-    const d = humanDateString(a.appliedAt);
+    const d = humanDateFromApp(a);
     return d && sameDay(d, now);
   });
   if (!today.length) {
-    appendMsg("No new applications today — yet.", "bot");
+    appendMsg("No new applications today ��� yet.", "bot");
     return;
   }
   const byRole = {};
@@ -292,7 +334,7 @@ function actionToday() {
   }
   const breakdown = Object.entries(byRole)
     .sort((a, b) => b[1] - a[1])
-    .map(([r, n]) => `<li>${esc(r)} — <strong>${n}</strong></li>`)
+    .map(([r, n]) => `<li>${esc(r)} ��� <strong>${n}</strong></li>`)
     .join("");
   appendMsg(
     `<strong>${today.length} application${today.length === 1 ? "" : "s"} today.</strong>` +
@@ -306,7 +348,7 @@ function actionWeekly() {
   const now = new Date();
   const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
   const week = apps.filter((a) => {
-    const d = humanDateString(a.appliedAt);
+    const d = humanDateFromApp(a);
     return d && d >= weekAgo;
   });
   const total   = week.length;
@@ -341,16 +383,16 @@ function actionStale() {
   const cutoff = new Date(now); cutoff.setHours(cutoff.getHours() - 48);
   const stale = apps.filter((a) => {
     if ((a.status || "Pending") !== "Pending") return false;
-    const d = humanDateString(a.appliedAt);
+    const d = humanDateFromApp(a);
     return d && d <= cutoff;
   });
   if (!stale.length) {
-    appendMsg("All pending applications are under 48 hours old — nothing stale.", "bot");
+    appendMsg("All pending applications are under 48 hours old ��� nothing stale.", "bot");
     return;
   }
   const rows = stale
     .slice(0, 12)
-    .map((a) => applicantCardHtml(a, { subtitle: `Pending since ${esc(a.appliedAt || "—")}` }))
+    .map((a) => applicantCardHtml(a, { subtitle: `Pending since ${esc(a.appliedAt || "���")}` }))
     .join("");
   appendMsg(
     `<strong>${stale.length} pending application${stale.length === 1 ? "" : "s"} over 48 hours.</strong>` +
@@ -368,8 +410,8 @@ function actionRecent() {
   const recent = apps
     .slice()
     .sort((a, b) => {
-      const da = humanDateString(a.appliedAt) || 0;
-      const db = humanDateString(b.appliedAt) || 0;
+      const da = humanDateFromApp(a) || 0;
+      const db = humanDateFromApp(b) || 0;
       return db - da;
     })
     .slice(0, 10);
@@ -425,7 +467,7 @@ function actionSkillCoverage(roleId) {
     });
 
     const html =
-      `<strong>Skill coverage · ${esc(role.title)}</strong> <span style="opacity:0.6">(${total} applicant${total === 1 ? "" : "s"})</span>` +
+      `<strong>Skill coverage �� ${esc(role.title)}</strong> <span style="opacity:0.6">(${total} applicant${total === 1 ? "" : "s"})</span>` +
       `<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">` +
       coverage.map((c) => {
         const color = c.pct >= 50 ? "#22c55e" : c.pct >= 20 ? "#f59e0b" : "#ef4444";
@@ -456,17 +498,17 @@ async function fetchStudentSkills(uid) {
 function actionInterviewNext() {
   const pending = apps.filter((a) => (a.status || "Pending") === "Pending");
   if (!pending.length) {
-    appendMsg("No pending applications right now — all caught up.", "bot");
+    appendMsg("No pending applications right now ��� all caught up.", "bot");
     return;
   }
   const sorted = pending.slice().sort((a, b) => {
-    const da = humanDateString(a.appliedAt) || 0;
-    const db = humanDateString(b.appliedAt) || 0;
+    const da = humanDateFromApp(a) || 0;
+    const db = humanDateFromApp(b) || 0;
     return da - db;
   }).slice(0, 3);
 
   const rows = sorted.map((a) => applicantCardHtml(a, {
-    subtitle: `Pending · applied ${esc(a.appliedAt || "—")}`,
+    subtitle: `Pending �� applied ${esc(a.appliedAt || "���")}`,
     badge: "Review next",
   })).join("");
   appendMsg(
@@ -582,7 +624,7 @@ async function actionPromising(roleId) {
 
   const typing = appendTyping();
   const status = appendMsg(
-    `<em>Reading ${roleApps.length} CV${roleApps.length === 1 ? "" : "s"} for <strong>${esc(role.title)}</strong>…</em>`,
+    `<em>Reading ${roleApps.length} CV${roleApps.length === 1 ? "" : "s"} for <strong>${esc(role.title)}</strong>���</em>`,
     "bot",
     { html: true },
   );
@@ -612,7 +654,7 @@ async function actionPromising(roleId) {
     }).join("\n");
 
     const data = await askGeminiJson({
-      prompt: `Rank these candidates for the role. Fit score 0-100 = skills alignment × CV quality × relevance to role description. Give 2-4 concrete strengths and 1-3 gaps per candidate. Keep verdicts under 25 words. Return JSON only.\n\n--- ROLE ---\n${roleBlock}\n\n--- CANDIDATES ---\n${candidateBlock}`,
+      prompt: `Rank these candidates for the role. Fit score 0-100 = skills alignment �� CV quality �� relevance to role description. Give 2-4 concrete strengths and 1-3 gaps per candidate. Keep verdicts under 25 words. Return JSON only.\n\n--- ROLE ---\n${roleBlock}\n\n--- CANDIDATES ---\n${candidateBlock}`,
       system: "You are a senior recruiter ranking student interns. Be honest, specific, and concise. Note that this ranking is AI-suggested, not final.",
       schema: rankingSchema,
       temperature: 0.35,
@@ -638,8 +680,8 @@ function renderRanking(role, data, poolSize) {
     ? `<p style="font-size:0.85rem;opacity:0.8;margin:0 0 10px">${esc(data.overview)}</p>`
     : "";
   appendMsg(
-    `<strong>AI-suggested ranking · ${esc(role.title)}</strong> <span style="opacity:0.6">(${ranked.length} of ${poolSize})</span>` +
-    `<div style="font-size:0.72rem;opacity:0.6;letter-spacing:0.06em;text-transform:uppercase;margin:4px 0 10px">Not authoritative — recruiter makes the final call</div>` +
+    `<strong>AI-suggested ranking �� ${esc(role.title)}</strong> <span style="opacity:0.6">(${ranked.length} of ${poolSize})</span>` +
+    `<div style="font-size:0.72rem;opacity:0.6;letter-spacing:0.06em;text-transform:uppercase;margin:4px 0 10px">Not authoritative ��� recruiter makes the final call</div>` +
     overview +
     `<div class="tars-card-list">${cards}</div>`,
     "bot",
@@ -668,7 +710,7 @@ function rankedCardHtml(rank, app) {
       ${rank.verdict ? `<p style="font-size:0.85rem;margin:8px 0 6px;line-height:1.5">${esc(rank.verdict)}</p>` : ""}
       ${listBlock("Strengths", rank.strengths, "#22c55e")}
       ${listBlock("Gaps", rank.gaps, "#f59e0b")}
-      ${(app?.cvUrl || app?.cvData) ? `<a class="tars-applicant-cv" href="${esc(app.cvUrl || app.cvData)}" target="_blank" rel="noopener" download="${esc(app.cvName || "cv.pdf")}">📄 Download CV</a>` : ""}
+      ${(app?.cvUrl || app?.cvData) ? `<a class="tars-applicant-cv" href="${esc(app.cvUrl || app.cvData)}" target="_blank" rel="noopener" download="${esc(app.cvName || "cv.pdf")}">���� Download CV</a>` : ""}
     </div>`;
 }
 
@@ -694,13 +736,13 @@ function applicantCardHtml(app, opts = {}) {
         <div class="tars-applicant-avatar" style="background:linear-gradient(135deg,#7c6bff,#a855f7)">${esc(init)}</div>
         <div style="flex:1;min-width:0">
           <div style="font-weight:800;font-size:0.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}</div>
-          <div style="font-size:0.74rem;opacity:0.65;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(app.role || "—")} · ${esc(opts.subtitle || status)}</div>
+          <div style="font-size:0.74rem;opacity:0.65;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(app.role || "���")} �� ${esc(opts.subtitle || status)}</div>
         </div>
         <span style="padding:3px 8px;border-radius:999px;background:${color}22;color:${color};border:1px solid ${color}55;font-size:0.7rem;font-weight:700">
           ${esc(opts.badge || status)}
         </span>
       </div>
-      ${(app.cvUrl || app.cvData) ? `<a class="tars-applicant-cv" href="${esc(app.cvUrl || app.cvData)}" target="_blank" rel="noopener" download="${esc(app.cvName || "cv.pdf")}">📄 ${esc(app.cvName || "cv.pdf")}</a>` : ""}
+      ${(app.cvUrl || app.cvData) ? `<a class="tars-applicant-cv" href="${esc(app.cvUrl || app.cvData)}" target="_blank" rel="noopener" download="${esc(app.cvName || "cv.pdf")}">���� ${esc(app.cvName || "cv.pdf")}</a>` : ""}
     </div>`;
 }
 

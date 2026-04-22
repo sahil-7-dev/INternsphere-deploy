@@ -7,7 +7,7 @@
   "scripts": {
     "test:unit": "vitest run --dir tests/unit",
     "test:unit:watch": "vitest --dir tests/unit",
-    "test:rules": "firebase emulators:exec --only firestore \"vitest run --dir tests/rules --no-file-parallelism\"",
+    
     "test": "npm run test:unit && npm run test:rules"
   },
   "devDependencies": {

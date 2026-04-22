@@ -5,7 +5,7 @@
 // client JS. To point at a different proxy (e.g. local dev), set
 // window.GEMINI_PROXY_URL before this module loads.
 
-const DEFAULT_MODEL = "gemini-2.5-flash-preview-04-17";
+const DEFAULT_MODEL = "gemini-2.5-flash";
 
 const PROXY_URL =
   (typeof window !== "undefined" && window.GEMINI_PROXY_URL) || "/api/gemini";
@@ -37,6 +37,9 @@ export async function askGemini(opts = {}) {
     generationConfig: {
       temperature,
       maxOutputTokens: maxTokens,
+      // Disable thinking mode — gemini-2.5-flash now thinks by default which
+      // adds latency and can break JSON schema structured output responses.
+      thinkingConfig: { thinkingBudget: 0 },
       ...(responseMimeType ? { responseMimeType } : {}),
       ...(responseSchema ? { responseSchema } : {}),
     },

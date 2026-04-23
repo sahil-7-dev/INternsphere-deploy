@@ -1019,6 +1019,15 @@ function renderCertificatesPanel() {
   }
   if (empty) empty.style.display = "none";
 
+  // Prime student profiles (profilePic) then re-render once loaded
+  const unprimedIds = approved
+    .map((a) => a.studentId)
+    .filter((id) => id && !(id in studentCache) && !studentPending.has(id));
+  if (unprimedIds.length) {
+    primeStudents(approved, function () { renderCertificatesPanel(); });
+    // Fall through to render with whatever is cached so far (initials)
+  }
+
   list.innerHTML = approved.map((app) => {
     const intTasks = tasksCacheByInternship[app.internshipId] || [];
     const finalTask = intTasks.find((t) => t.isFinal);
@@ -1056,10 +1065,17 @@ function renderCertificatesPanel() {
       completionHint = "Completion certificate issued.";
     }
 
+    // Use cached profile pic if available
+    const cachedStudent = app.studentId ? studentCache[app.studentId] : null;
+    const hasPic = cachedStudent && cachedStudent.profilePic;
+    const avatarHtml = hasPic
+      ? '<div class="cert-row__avatar cert-row__avatar--img"><img src="' + esc(cachedStudent.profilePic) + '" alt="' + esc(displayName) + '"></div>'
+      : '<div class="cert-row__avatar">' + esc(initials) + '</div>';
+
     return (
       '<div class="cert-row" data-app-id="' + esc(app.id) + '">' +
         '<div class="cert-row__identity">' +
-          '<div class="cert-row__avatar">' + esc(initials) + '</div>' +
+          avatarHtml +
           '<div>' +
             '<div class="cert-row__name">' + esc(displayName) + '</div>' +
             '<div class="cert-row__role">' + esc(role) + '</div>' +

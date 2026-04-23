@@ -751,6 +751,9 @@ async function sendFreeform(text) {
   appendMsg(text, "user");
   const typing = appendTyping();
 
+  // Refresh data so freeform answers use the same live context as dropdown actions
+  if (currentUid) await refreshData(currentUid);
+
   try {
     const reply = await askGemini({
       prompt: `User asked: ${text}\n\nContext about their hiring pool:\n` +

@@ -21,17 +21,23 @@ import {
 const $ = (id) => document.getElementById(id);
 
 function buildSystemPrompt(ctx) {
+  const now = new Date();
   const state = [
+    `Today: ${now.toDateString()}`,
     ctx.applications !== undefined && `Applications submitted: ${ctx.applications}`,
+    ctx.pending !== undefined && `Pending applications: ${ctx.pending}`,
+    ctx.shortlisted !== undefined && ctx.shortlisted > 0 && `Shortlisted applications: ${ctx.shortlisted} (interview likely coming — check the dashboard)`,
     ctx.approved !== undefined && `Approved applications: ${ctx.approved}`,
+    ctx.rejected !== undefined && ctx.rejected > 0 && `Rejected applications: ${ctx.rejected}`,
     ctx.activeInternship && `Active internship: ${ctx.activeInternship.title} at ${ctx.activeInternship.companyName}`,
-    ctx.taskCount !== undefined && `Assigned tasks: ${ctx.taskCount} (${ctx.tasksDone || 0} submitted)`,
+    ctx.taskCount !== undefined && `Assigned tasks: ${ctx.taskCount} total (${ctx.tasksDone || 0} submitted, ${ctx.taskCount - (ctx.tasksDone || 0)} remaining)`,
+    ctx.interviewDate && `Upcoming interview: ${ctx.interviewDate} — ${ctx.interviewLink ? 'join link available' : 'check dashboard for link'}`,
   ].filter(Boolean).join("\n");
 
   return composeSystemPrompt({
     studentName: ctx.name,
     studentState: state,
-    pageContext: "Student is on the Dashboard.",
+    pageContext: "Student is on the Dashboard. Data above is live from the database.",
   });
 }
 
@@ -58,7 +64,17 @@ async function loadContext(user) {
     ));
     const apps = appsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
     ctx.applications = apps.length;
-    ctx.approved = apps.filter((a) => a.status === "Approved").length;
+    ctx.pending     = apps.filter((a) => (a.status || "Pending") === "Pending").length;
+    ctx.shortlisted = apps.filter((a) => a.status === "Shortlisted").length;
+    ctx.approved    = apps.filter((a) => a.status === "Approved").length;
+    ctx.rejected    = apps.filter((a) => a.status === "Rejected").length;
+
+    // Interview date from shortlisted app
+    const shortlistedApp = apps.find((a) => a.status === "Shortlisted" && a.interviewDate);
+    if (shortlistedApp) {
+      ctx.interviewDate = shortlistedApp.interviewDate;
+      ctx.interviewLink = shortlistedApp.interviewLink || "";
+    }
 
     const approvedApp = apps.find((a) => a.status === "Approved");
     if (approvedApp?.internshipId) {
@@ -133,6 +149,21 @@ function ensureChat() {
 async function sendMessage(text) {
   const clean = (text || "").trim();
   if (!clean) return;
+
+  // Refresh context before every message so TARS always has live data
+  if (auth.currentUser) {
+    await loadContext(auth.currentUser).catch(() => {});
+    // Rebuild chat with fresh system prompt (keeps history intact)
+    const history = chat ? chat.history : loadHistory(currentUid);
+    chat = createChat({
+      system: buildSystemPrompt(ctx),
+      temperature: 0.6,
+      maxTokens: 1800,
+      history,
+      contextWindow: 40,
+      onUpdate: (entries) => saveHistory(currentUid, entries),
+    });
+  }
 
   const c = ensureChat();
   appendMsg(clean, "user");

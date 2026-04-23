@@ -69,11 +69,24 @@ function appendTyping() {
 async function sendMessage(text) {
   const clean = (text || "").trim();
   if (!clean) return;
+
+  // Always rebuild system prompt so it captures the latest DOM state
+  // (internship details are rendered async - first message may fire before paint)
+  const freshSystem = buildSystemPrompt();
   if (!chat) {
     chat = createChat({
-      system: buildSystemPrompt(),
+      system: freshSystem,
       temperature: 0.7,
       maxTokens: 600,
+    });
+  } else {
+    // Patch the system instruction on the underlying chat by replacing chat
+    // with a fresh one that carries the same history but updated context
+    chat = createChat({
+      system: freshSystem,
+      temperature: 0.7,
+      maxTokens: 600,
+      history: chat.history,
     });
   }
 

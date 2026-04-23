@@ -253,6 +253,11 @@ async function sendMessage(text) {
   const typing = appendTyping();
   if (sendBtn) sendBtn.disabled = true;
 
+  // Refresh context so task status/submission counts stay current
+  if (auth.currentUser) {
+    await loadContext(auth.currentUser).catch(() => {});
+  }
+
   try {
     const editorHtml = window.WorkroomEditor?.getContent() || "";
     const editorIsEmpty = window.WorkroomEditor?.isEmpty() ?? true;

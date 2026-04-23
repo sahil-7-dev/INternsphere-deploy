@@ -50,45 +50,18 @@ function saveCvSummary(appId, size, obj) {
 
 // system prompt
 function buildSystemPrompt() {
-  const now = new Date();
-  const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
-
-  const openRoles   = internships.filter((i) => (i.status || 'Open') === 'Open');
-  const pending     = apps.filter((a) => (a.status || 'Pending') === 'Pending');
-  const approved    = apps.filter((a) => a.status === 'Approved');
-  const shortlisted = apps.filter((a) => a.status === 'Shortlisted');
-  const rejected    = apps.filter((a) => a.status === 'Rejected');
-  const thisWeek    = apps.filter((a) => { const d = humanDateFromApp(a); return d && d >= weekAgo; });
-
-  const rolesSummary = openRoles.map((r) => {
-    const count = apps.filter((a) => a.internshipId === r.id).length;
-    return '  • ' + r.title + ' (' + count + ' applicant' + (count === 1 ? '' : 's') + ', ' + (r.location || '—') + ')';
-  }).join('
-') || '  (none)';
-
   const state = [
-    companyName && ('Company: ' + companyName),
-    'Today: ' + now.toDateString(),
-    'Open roles: ' + openRoles.length + ' / total posted: ' + internships.length,
-    openRoles.length > 0 ? ('Open roles detail:
-' + rolesSummary) : null,
-    'Total applications: ' + apps.length,
-    '  — Pending: ' + pending.length,
-    '  — Shortlisted: ' + shortlisted.length,
-    '  — Approved: ' + approved.length,
-    '  — Rejected: ' + rejected.length,
-    'Applications this week: ' + thisWeek.length,
-  ].filter(Boolean).join('
-');
+    companyName && `Company: ${companyName}`,
+    internships.length !== undefined && `Open internships: ${internships.filter((i) => (i.status || "Open") === "Open").length} / total ${internships.length}`,
+    apps.length !== undefined && `Total applications received: ${apps.length}`,
+  ].filter(Boolean).join("\n");
 
   const pageLines = [
-    'User is a company recruiter on the InternSphere dashboard.',
-    'The LIVE HIRING DATA above is fetched fresh from the database — use these exact numbers when answering questions about applications or roles.',
-    'Keep responses actionable and numerical when possible.',
-    'When ranking candidates, include a brief reasoning per candidate.',
-    'Always label AI-suggested ranking as non-authoritative — the recruiter makes the final call.',
-  ].join('
-');
+    "User is a company recruiter on the InternSphere dashboard.",
+    "Keep responses actionable and numerical when possible.",
+    "When ranking candidates, include a brief reasoning per candidate.",
+    "Always label AI-suggested ranking as non-authoritative — the recruiter makes the final call.",
+  ].join("\n");
 
   return composeSystemPrompt({
     studentName: companyName,
@@ -96,6 +69,7 @@ function buildSystemPrompt() {
     pageContext: pageLines,
   });
 }
+
 // data loading
 async function refreshData(uid) {
   try {
@@ -280,22 +254,6 @@ function showSuggest() { $("coTarsSuggest")?.classList.remove("is-hidden"); }
 function hideSuggest() { $("coTarsSuggest")?.classList.add("is-hidden"); }
 
 // actions
-// Returns a Date from an application object, preferring the numeric
-// appliedAtMs timestamp (reliable) over the locale-string appliedAt field
-// (unreliable across locales). Falls back gracefully.
-function humanDateFromApp(app) {
-  if (!app) return null;
-  if (typeof app.appliedAtMs === "number" && !isNaN(app.appliedAtMs)) {
-    return new Date(app.appliedAtMs);
-  }
-  if (app.appliedAt) {
-    const d = new Date(app.appliedAt);
-    if (!isNaN(d.getTime())) return d;
-  }
-  return null;
-}
-
-// Legacy string-only variant (kept for callers that pass raw strings)
 function humanDateString(str) {
   if (!str) return null;
   const d = new Date(str);
@@ -320,7 +278,7 @@ async function executeAction(id, opts = {}) {
 function actionToday() {
   const now = new Date();
   const today = apps.filter((a) => {
-    const d = humanDateFromApp(a);
+    const d = humanDateString(a.appliedAt);
     return d && sameDay(d, now);
   });
   if (!today.length) {
@@ -348,7 +306,7 @@ function actionWeekly() {
   const now = new Date();
   const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
   const week = apps.filter((a) => {
-    const d = humanDateFromApp(a);
+    const d = humanDateString(a.appliedAt);
     return d && d >= weekAgo;
   });
   const total   = week.length;
@@ -383,7 +341,7 @@ function actionStale() {
   const cutoff = new Date(now); cutoff.setHours(cutoff.getHours() - 48);
   const stale = apps.filter((a) => {
     if ((a.status || "Pending") !== "Pending") return false;
-    const d = humanDateFromApp(a);
+    const d = humanDateString(a.appliedAt);
     return d && d <= cutoff;
   });
   if (!stale.length) {
@@ -410,8 +368,8 @@ function actionRecent() {
   const recent = apps
     .slice()
     .sort((a, b) => {
-      const da = humanDateFromApp(a) || 0;
-      const db = humanDateFromApp(b) || 0;
+      const da = humanDateString(a.appliedAt) || 0;
+      const db = humanDateString(b.appliedAt) || 0;
       return db - da;
     })
     .slice(0, 10);
@@ -502,8 +460,8 @@ function actionInterviewNext() {
     return;
   }
   const sorted = pending.slice().sort((a, b) => {
-    const da = humanDateFromApp(a) || 0;
-    const db = humanDateFromApp(b) || 0;
+    const da = humanDateString(a.appliedAt) || 0;
+    const db = humanDateString(b.appliedAt) || 0;
     return da - db;
   }).slice(0, 3);
 
@@ -751,9 +709,6 @@ async function sendFreeform(text) {
   appendMsg(text, "user");
   const typing = appendTyping();
 
-  // Refresh data so freeform answers use the same live context as dropdown actions
-  if (currentUid) await refreshData(currentUid);
-
   try {
     const reply = await askGemini({
       prompt: `User asked: ${text}\n\nContext about their hiring pool:\n` +
@@ -791,6 +746,7 @@ function init() {
   $("coTarsOrb")?.addEventListener("click", () => {
     openChat();
     renderRootMenu();
+    showSuggest();
   });
   $("coTarsChatClose")?.addEventListener("click", closeChat);
   $("coTarsModal")?.addEventListener("click", (e) => {

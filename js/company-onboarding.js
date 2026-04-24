@@ -432,8 +432,19 @@ async function openProfileModal() {
     ? new Date(created).toLocaleDateString(undefined, { month: "short", year: "numeric" })
     : "—";
   $("cpUid").textContent = currentUid;
-  $("cpStatus").textContent = isProfileComplete() ? "✓ Verified profile" : "Incomplete";
-  $("cpStatus").style.color = isProfileComplete() ? "#22c55e" : "#f59e0b";
+  // Show real admin verification status — not just whether the profile is filled in
+  const isVerified = d.verified === true;
+  const isRejected = d.rejected === true;
+  if (isVerified) {
+    $("cpStatus").textContent = "✓ Verified";
+    $("cpStatus").style.color = "#22c55e";
+  } else if (isRejected) {
+    $("cpStatus").textContent = "✗ Verification rejected";
+    $("cpStatus").style.color = "#ef4444";
+  } else {
+    $("cpStatus").textContent = "⏳ Awaiting verification";
+    $("cpStatus").style.color = "#f59e0b";
+  }
 
   loadQuickStats().catch(() => {});
 

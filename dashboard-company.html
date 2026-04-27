@@ -674,6 +674,25 @@
   </div>
 </div>
 
+<!-- sign-out confirmation -->
+<div id="companyLogoutModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="companyLogoutTitle">
+  <div class="modal-card" style="max-width:420px">
+    <div class="modal-hd">
+      <h3 id="companyLogoutTitle">Sign out?</h3>
+      <button class="modal-close" id="companyLogoutClose" type="button" aria-label="Close">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3l10 10M13 3L3 13"/></svg>
+      </button>
+    </div>
+    <p style="margin:0;color:var(--text3);font-size:0.9rem;line-height:1.5">
+      You'll be returned to the login screen. Make sure any unsaved changes are committed first.
+    </p>
+    <div class="modal-ft">
+      <button class="btn-ghost" id="companyLogoutCancel" type="button">Cancel</button>
+      <button class="btn-danger" id="companyLogoutConfirm" type="button">Sign out</button>
+    </div>
+  </div>
+</div>
+
 <!-- company tars -->
 <button class="tars-orb" id="coTarsOrb" type="button" aria-label="Ask TARS">
   <img loading="lazy" decoding="async" class="tars-orb-img" src="assets/images/icons8-ai-64.png" alt="" aria-hidden="true">
@@ -718,6 +737,8 @@
 <script type="module" src="js/dashboard-company.js"></script>
 <script type="module" src="js/company-tasks.js"></script>
 <script type="module" src="js/tars-company.js"></script>
+<script src="js/tars-resize.js" defer></script>
+<script src="js/tars-effects.js" defer></script>
 <script src="js/ui-dynamic.js"></script>
 <script src="js/footer.js"></script>
 <script>

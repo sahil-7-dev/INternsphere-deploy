@@ -683,6 +683,29 @@
   </div>
 </div>
 
+<div class="admin-modal" id="adminNoticeModal" hidden>
+  <div class="admin-modal__card" style="max-width:480px">
+    <h3 id="adminNoticeTitle">Notice</h3>
+    <div class="admin-modal__body" id="adminNoticeBody">—</div>
+    <div class="admin-modal__actions">
+      <button class="admin-btn is-primary" id="adminNoticeOk" type="button">OK</button>
+    </div>
+  </div>
+</div>
+
+<div class="admin-modal" id="adminLogoutModal" hidden>
+  <div class="admin-modal__card" style="max-width:420px">
+    <h3>Sign out of admin console?</h3>
+    <p style="margin:0 0 14px;color:var(--text3);font-size:0.9rem;line-height:1.5">
+      You'll be returned to the login screen. Any in-progress edits in this tab will be lost.
+    </p>
+    <div class="admin-modal__actions">
+      <button class="admin-btn" id="adminLogoutCancel" type="button">Cancel</button>
+      <button class="admin-btn is-danger" id="adminLogoutConfirm" type="button">Sign out</button>
+    </div>
+  </div>
+</div>
+
 <div class="admin-modal" id="supportModal" hidden>
   <div class="admin-modal__card">
     <h3 id="sm_subject">Support message</h3>

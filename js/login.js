@@ -99,6 +99,14 @@ document.addEventListener("click", (e) => {
 async function safeRedirect(user) {
   const realRole = await getUserRole(user.uid);
 
+  // If the users/{uid} doc no longer exists (admin deleted this account),
+  // the Auth record may still authenticate but the app should reject sign-in.
+  if (realRole === null) {
+    await signOut(auth);
+    showAuthMsg("This account no longer exists. Please contact support if this is a mistake.", "error");
+    return;
+  }
+
   localStorage.setItem(
     "currentUser",
     JSON.stringify({

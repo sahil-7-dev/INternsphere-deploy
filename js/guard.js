@@ -18,7 +18,14 @@ export function requireAuth(redirectTo = "login.html") {
     }
     try {
       const u = await getDoc(doc(db, "users", user.uid));
-      if (u.exists() && u.data().disabled === true) {
+      if (!u.exists()) {
+        const { signOut } = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js");
+        await signOut(auth);
+        alert("This account no longer exists. Please contact support if this is a mistake.");
+        window.location.href = redirectTo;
+        return;
+      }
+      if (u.data().disabled === true) {
         const { signOut } = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js");
         await signOut(auth);
         alert("Your account has been suspended. Please contact support.");
@@ -33,7 +40,13 @@ export function requireAdmin(fallback = "login.html") {
     if (!user) { window.location.href = fallback; return; }
     try {
       const u = await getDoc(doc(db, "users", user.uid));
-      const data = u.exists() ? u.data() : {};
+      if (!u.exists()) {
+        const { signOut } = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js");
+        await signOut(auth);
+        window.location.href = fallback;
+        return;
+      }
+      const data = u.data();
       if (data.disabled === true || data.role !== "admin") {
         window.location.href = fallback;
       }
@@ -60,7 +73,14 @@ export function requireRole(allowedRoles) {
     }
     try {
       const u = await getDoc(doc(db, "users", user.uid));
-      const data = u.exists() ? u.data() : {};
+      if (!u.exists()) {
+        const { signOut } = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js");
+        await signOut(auth);
+        alert("This account no longer exists. Please contact support if this is a mistake.");
+        window.location.href = "login.html";
+        return;
+      }
+      const data = u.data();
 
       if (data.disabled === true) {
         const { signOut } = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js");

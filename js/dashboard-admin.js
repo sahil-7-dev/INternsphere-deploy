@@ -40,6 +40,36 @@ function fmtDate(ts) {
   try { return new Date(ts).toLocaleDateString(); } catch { return "—"; }
 }
 
+function showAdminNotice(title, body) {
+  const modal = $("adminNoticeModal");
+  const t     = $("adminNoticeTitle");
+  const b     = $("adminNoticeBody");
+  const ok    = $("adminNoticeOk");
+  if (!modal || !t || !b || !ok) {
+    alert(typeof body === "string" ? body : (b?.textContent || title));
+    return;
+  }
+  t.textContent = title || "Notice";
+  b.textContent = body || "";
+  modal.hidden = false;
+  document.body.classList.add("modal-open");
+
+  const close = () => {
+    modal.hidden = true;
+    document.body.classList.remove("modal-open");
+    ok.removeEventListener("click", close);
+    modal.removeEventListener("click", onBackdrop);
+    document.removeEventListener("keydown", onKey);
+  };
+  const onBackdrop = (e) => { if (e.target === modal) close(); };
+  const onKey = (e) => { if (e.key === "Escape" || e.key === "Enter") close(); };
+
+  ok.addEventListener("click", close);
+  modal.addEventListener("click", onBackdrop);
+  document.addEventListener("keydown", onKey);
+  ok.focus();
+}
+
 // state
 
 let CURRENT_UID = null;
@@ -368,16 +398,22 @@ document.querySelector("#usersTable").addEventListener("click", async (e) => {
       });
 
       if (!authRemoved) {
-        alert(
+        showAdminNotice(
+          "Auth account not deleted",
           "Firestore data removed, but the Firebase Auth account could " +
           "NOT be deleted automatically (" + (authErrorMsg || "unknown") + ").\n\n" +
           "Deploy the `deleteAuthUser` Cloud Function (see functions/index.js) " +
           "to enable one-click Auth deletion, or open Firebase console → " +
           "Authentication → Users and delete " + user.email + " manually."
         );
+      } else {
+        showAdminNotice(
+          "User deleted",
+          user.email + " has been removed. Their Firebase Auth account and all Firestore data are gone."
+        );
       }
     } catch (err) {
-      alert("Delete failed: " + (err.message || err));
+      showAdminNotice("Delete failed", err.message || String(err));
     }
   }
 });
@@ -538,14 +574,20 @@ document.querySelector("#verifyTable").addEventListener("click", async (e) => {
         uid, email: user.email, authRemoved, authError,
       });
       if (!authRemoved) {
-        alert(
+        showAdminNotice(
+          "Auth account not deleted",
           "Firestore removed. The Firebase Auth account could not be " +
           "deleted automatically (" + (authError || "unknown") + ") — remove " +
           user.email + " manually from Firebase console → Authentication."
         );
+      } else {
+        showAdminNotice(
+          "Company deleted",
+          user.email + " has been removed. Their Firebase Auth account and all Firestore data are gone."
+        );
       }
     } catch (err) {
-      alert("Delete failed: " + (err.message || err));
+      showAdminNotice("Delete failed", err.message || String(err));
     }
   }
 });
@@ -1106,13 +1148,30 @@ async function logAdminAction(type, detail) {
 
 // logout
 
-$("adminLogoutBtn")?.addEventListener("click", async () => {
-  if (!confirm("Sign out of the admin console?")) return;
-  const theme = localStorage.getItem("theme");
-  const legacy = localStorage.getItem("internsphere_theme");
-  try { await signOut(auth); } catch (_) {}
-  localStorage.clear();
-  if (theme)  localStorage.setItem("theme", theme);
-  if (legacy) localStorage.setItem("internsphere_theme", legacy);
-  window.location.href = "login.html";
-});
+(function () {
+  const btn     = $("adminLogoutBtn");
+  const modal   = $("adminLogoutModal");
+  const cancel  = $("adminLogoutCancel");
+  const confirmBtn = $("adminLogoutConfirm");
+  if (!btn || !modal || !cancel || !confirmBtn) return;
+
+  const open  = () => { modal.hidden = false; document.body.classList.add("modal-open"); };
+  const close = () => { modal.hidden = true;  document.body.classList.remove("modal-open"); };
+
+  btn.addEventListener("click", open);
+  cancel.addEventListener("click", close);
+  modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+  document.addEventListener("keydown", (e) => { if (!modal.hidden && e.key === "Escape") close(); });
+
+  confirmBtn.addEventListener("click", async () => {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = "Signing out…";
+    const theme = localStorage.getItem("theme");
+    const legacy = localStorage.getItem("internsphere_theme");
+    try { await signOut(auth); } catch (_) {}
+    localStorage.clear();
+    if (theme)  localStorage.setItem("theme", theme);
+    if (legacy) localStorage.setItem("internsphere_theme", legacy);
+    window.location.href = "Index.html";
+  });
+})();

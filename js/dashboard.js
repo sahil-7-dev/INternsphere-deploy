@@ -756,7 +756,7 @@ setTimeout(() => {
     try { sessionStorage.removeItem("guestGreetingShown"); } catch {}
     await signOut(auth);
     localStorage.removeItem("currentUser");
-    window.location.href = "./login.html";
+    window.location.href = "./Index.html";
   });
 
 });
@@ -947,35 +947,36 @@ if (tarsMessage) {
   ];
 
   const devMessages = [
-    "3 uncommitted changes in your branch.",
-    "Warning: function 'fetchData' took 2.3s to execute.",
-    "New error: 'Cannot read property x of undefined'.",
-    "Memory usage is higher than usual, check your loops.",
-    "You have 2 pending TODOs in your code.",
-    "API response delayed by 450ms.",
-    "Unit tests: 2 failed, 18 passed.",
-    "Console shows 1 deprecation warning.",
-    "Your last commit was 3 hours ago.",
-    "Linting: 5 issues detected in style.js.",
-    "Branch is ahead by 2 commits, behind by 1.",
-    "Database query returned empty result. Verify your logic.",
-    "Dependency 'lodash' is outdated.",
-    "Server response code: 500. Investigate immediately.",
-    "UI render time spiked to 120ms on this component.",
-    "Ahh… not developer again. Brace for impact.",
-    "Console.log is silently judging you.",
-    "You debug like a detective who lost their magnifying glass.",
-    "Somewhere a bug is applauding your creative chaos.",
-    "Your commit history tells a suspenseful story.",
-    "Variables are panicking… slightly.",
-    "You didn’t break it… but it’s thinking about it.",
-    "Temporary fixes strike again. Bold choice.",
-    "Stack Overflow called. It has questions about you.",
-    "The dashboard trembles… it knows you’re here.",
-    "Every click you make sends ripples through the server.",
-    "Ahh… developer again. The console whispers: 'Please… not today.'",
-    "Your logic haunts production with theatrical flair.",
-    "Even AI hesitates reading your code. It needs therapy."
+    "Average API latency is hovering around 380ms — worth a profile pass.",
+    "Cold-start time on first paint sitting near 1.1s. Normal for the morning hit.",
+    "Cache hit rate around 70% — room to climb with longer TTLs.",
+    "Memory footprint stable across the last session. No leaks flagged.",
+    "Background sync queue cleared on the last interval.",
+    "Re-renders climbing on this page — memoization worth a look.",
+    "Error rate sitting well inside the daily budget.",
+    "Network panel shows a few redundant calls on load — batching candidates.",
+    "DOM node count creeping past 2k. Virtualize the long list?",
+    "First Contentful Paint trending toward 1.4s. Watch the critical CSS.",
+    "Largest Contentful Paint green on desktop, yellow on 4G.",
+    "Layout shift score nudged past 0.05. Lock down image dimensions.",
+    "Long task detected on the main thread (>200ms). Chunk-split worth trying.",
+    "Auth token refresh cycle on schedule — next rotation in ~25 min.",
+    "Firestore read count running ~200/min, well inside the comfort zone.",
+    "Image asset payload is 1.4MB on this view — compress or lazy-load?",
+    "JS execution time on dashboard load is up about 15% week-over-week.",
+    "Unused CSS sitting around 18%. Worth running a purge pass.",
+    "Pending fetch promises: 0. Idle state looks healthy.",
+    "Two minor console warnings showing — nothing breaking, but worth a sweep.",
+    "Fonts swapping in around 280ms. Preloading the primary face would help.",
+    "Service worker registered, offline shell current.",
+    "Session storage usage at ~24KB. Well under quota.",
+    "LocalStorage growth flat this session — no surprise writes.",
+    "Time-to-interactive just over a second on this route. Solid.",
+    "Frame drops negligible on scroll. Animation budget healthy.",
+    "One transitive dependency chain deeper than the rest — flattening would shave install time.",
+    "Bundle size up roughly 12KB this week. Tree-shake check is due.",
+    "Listener count after the last navigation looks slightly high — verify cleanup.",
+    "Background fetch ran ~600ms — still inside the soft target."
   ];
 
   let messagePool = [];
@@ -1324,7 +1325,7 @@ document.querySelector(".logout")?.addEventListener("click", async () => {
     sessionStorage.removeItem("devGreeted");
     await signOut(auth);
     localStorage.removeItem("currentUser");
-    window.location.href = "./login.html";
+    window.location.href = "./Index.html";
   }, 1200);
 });
 

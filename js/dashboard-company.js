@@ -1477,21 +1477,42 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
-  wire("companyLogoutBtn", async function () {
-    if (!confirm("Sign out?")) return;
-    try { sessionStorage.removeItem("guestRole"); } catch (e) {}
-    try { sessionStorage.removeItem("guestGreetingShown"); } catch (e) {}
-    try {
-      const { signOut } = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js");
-      await signOut(auth);
-    } catch (e) { console.error(e); }
-    var theme = localStorage.getItem("theme");
-    var legacyTheme = localStorage.getItem("internsphere_theme");
-    localStorage.clear();
-    if (theme)       localStorage.setItem("theme", theme);
-    if (legacyTheme) localStorage.setItem("internsphere_theme", legacyTheme);
-    window.location.href = "login.html";
-  });
+  (function () {
+    var modal   = document.getElementById("companyLogoutModal");
+    var openBtn = document.getElementById("companyLogoutBtn");
+    var cancel  = document.getElementById("companyLogoutCancel");
+    var closeX  = document.getElementById("companyLogoutClose");
+    var confirmBtn = document.getElementById("companyLogoutConfirm");
+    if (!modal || !openBtn || !confirmBtn) return;
+
+    function open()  { modal.classList.remove("hidden"); document.body.classList.add("modal-open"); }
+    function close() { modal.classList.add("hidden");    document.body.classList.remove("modal-open"); }
+
+    openBtn.addEventListener("click", open);
+    cancel  && cancel.addEventListener("click", close);
+    closeX  && closeX.addEventListener("click", close);
+    modal.addEventListener("click", function (e) { if (e.target === modal) close(); });
+    document.addEventListener("keydown", function (e) {
+      if (!modal.classList.contains("hidden") && e.key === "Escape") close();
+    });
+
+    confirmBtn.addEventListener("click", async function () {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "Signing out…";
+      try { sessionStorage.removeItem("guestRole"); } catch (e) {}
+      try { sessionStorage.removeItem("guestGreetingShown"); } catch (e) {}
+      try {
+        const { signOut } = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js");
+        await signOut(auth);
+      } catch (e) { console.error(e); }
+      var theme = localStorage.getItem("theme");
+      var legacyTheme = localStorage.getItem("internsphere_theme");
+      localStorage.clear();
+      if (theme)       localStorage.setItem("theme", theme);
+      if (legacyTheme) localStorage.setItem("internsphere_theme", legacyTheme);
+      window.location.href = "Index.html";
+    });
+  })();
 
   // filter tabs
   document.querySelectorAll(".ftab").forEach(function (b) {

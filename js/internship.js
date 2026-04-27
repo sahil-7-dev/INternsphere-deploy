@@ -632,6 +632,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const { auth }    = await import("../firebase/firebase.js");
     await signOut(auth);
     localStorage.removeItem("currentUser");
-    window.location.href = "./login.html";
+    window.location.href = "./Index.html";
   });
 });

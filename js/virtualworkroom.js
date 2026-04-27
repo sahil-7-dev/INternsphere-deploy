@@ -442,7 +442,7 @@ function refreshCompletionModal() {
     btn.disabled = true;
     btn.style.opacity = "0.55";
     btn.textContent = "🔒 Waiting for company approval";
-    if (hint) hint.textContent = "You've finished every task. Your company will approve your completion shortly — the certificate will unlock here the moment they do.";
+    if (hint) hint.textContent = "Your company will review your submission and approve your certificate. You'll receive your certificate within 1 week.";
   }
 }
 

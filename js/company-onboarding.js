@@ -117,6 +117,7 @@ async function saveOnboarding() {
     location: $("onbLocation").value.trim(),
     website: $("onbWebsite").value.trim(),
     about: $("onbAbout").value.trim().slice(0, 220),
+    onboardingDone: true,
     updatedAt: serverTimestamp(),
   };
 
@@ -157,8 +158,9 @@ function setStatus(msg, kind) {
 }
 
 function isProfileComplete() {
-  const name = (companyData?.companyName || companyData?.name || "").trim();
-  return name.length > 0;
+  // Only consider profile complete once the onboarding form has been explicitly saved.
+  // This prevents new signups (which get companyName from auth) from skipping the modal.
+  return companyData?.onboardingDone === true;
 }
 
 function gateToast() {
@@ -265,6 +267,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   onAuthStateChanged(auth, async (user) => {
     if (!user) return; // auth redirect handled elsewhere
+    // Never prompt guest/anonymous users to complete a company profile
+    if (user.isAnonymous || sessionStorage.getItem("guestRole")) return;
     currentUid = user.uid;
 
     try {

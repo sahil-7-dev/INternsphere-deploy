@@ -1323,6 +1323,8 @@ document.querySelector(".logout")?.addEventListener("click", async () => {
 
   setTimeout(async () => {
     sessionStorage.removeItem("devGreeted");
+    sessionStorage.removeItem("guestRole");
+    sessionStorage.removeItem("guestGreetingShown");
     await signOut(auth);
     localStorage.removeItem("currentUser");
     window.location.href = "./Index.html";

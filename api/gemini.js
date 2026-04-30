@@ -2,19 +2,157 @@
 // Keeps GEMINI_API_KEY on the server. Set it in the Vercel project's
 // Environment Variables (Settings → Environment Variables).
 //
+// Required env:
+//   GEMINI_API_KEY           — your Gemini API key
+//   FIREBASE_PROJECT_ID      — e.g. internsphere-9c869
+//   UPSTASH_REDIS_REST_URL   — from Upstash dashboard
+//   UPSTASH_REDIS_REST_TOKEN — from Upstash dashboard
+//
 // Optional env:
-//   ALLOWED_ORIGINS — comma-separated list of origins allowed to call
+//   ALLOWED_ORIGINS       — comma-separated list of origins allowed to call
 //     this endpoint (e.g. "https://your-site.vercel.app,http://localhost:3000").
 //     If unset, any origin is allowed — fine for first deploys, tighten later.
+//   RATE_LIMIT_REQUESTS   — max requests per window per user (default: 20)
+//   RATE_LIMIT_WINDOW_SEC — window size in seconds (default: 60)
 
 export const config = {
   maxDuration: 30,
 };
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+const RATE_LIMIT_REQUESTS = parseInt(process.env.RATE_LIMIT_REQUESTS || "20", 10);
+const RATE_LIMIT_WINDOW_SEC = parseInt(process.env.RATE_LIMIT_WINDOW_SEC || "60", 10);
+
+// ---------------------------------------------------------------------------
+// Firebase token verification
+// Uses Google's public key endpoint — no firebase-admin SDK needed,
+// keeping the cold-start fast.
+// ---------------------------------------------------------------------------
+
+let _cachedKeys = null;
+let _cachedKeysExpiry = 0;
+
+async function getFirebasePublicKeys() {
+  const now = Date.now();
+  if (_cachedKeys && now < _cachedKeysExpiry) return _cachedKeys;
+
+  const res = await fetch(
+    "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
+  );
+  const cacheControl = res.headers.get("cache-control") || "";
+  const maxAgeMatch = cacheControl.match(/max-age=(\d+)/);
+  const maxAge = maxAgeMatch ? parseInt(maxAgeMatch[1], 10) * 1000 : 3_600_000;
+
+  _cachedKeys = await res.json();
+  _cachedKeysExpiry = now + maxAge;
+  return _cachedKeys;
+}
+
+function b64UrlDecode(str) {
+  const padded = str + "=".repeat((4 - (str.length % 4)) % 4);
+  return Buffer.from(padded, "base64");
+}
+
+async function verifyFirebaseToken(idToken) {
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  if (!projectId) throw new Error("FIREBASE_PROJECT_ID not configured");
+
+  const parts = idToken.split(".");
+  if (parts.length !== 3) throw new Error("Invalid token format");
+
+  const [headerB64, payloadB64, sigB64] = parts;
+
+  const header = JSON.parse(b64UrlDecode(headerB64).toString("utf8"));
+  const payload = JSON.parse(b64UrlDecode(payloadB64).toString("utf8"));
+
+  const now = Math.floor(Date.now() / 1000);
+
+  if (!payload.exp || payload.exp < now)   throw new Error("Token expired");
+  if (!payload.iat || now - payload.iat > 3600) throw new Error("Token too old");
+  if (payload.aud !== projectId)           throw new Error("Token audience mismatch");
+  if (payload.iss !== `https://securetoken.google.com/${projectId}`)
+    throw new Error("Token issuer mismatch");
+
+  // Verify RS256 signature with Google's public cert
+  const keys = await getFirebasePublicKeys();
+  const cert = keys[header.kid];
+  if (!cert) throw new Error("Unknown token key ID");
+
+  const pemBody = cert.replace(/-----[^-]+-----/g, "").replace(/\s/g, "");
+  const certDer = Buffer.from(pemBody, "base64");
+
+  const cryptoKey = await crypto.subtle.importKey(
+    "spki",
+    certDer,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["verify"]
+  );
+
+  const signingInput = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
+  const signature = b64UrlDecode(sigB64);
+
+  const valid = await crypto.subtle.verify(
+    "RSASSA-PKCS1-v1_5",
+    cryptoKey,
+    signature,
+    signingInput
+  );
+
+  if (!valid) throw new Error("Token signature invalid");
+
+  return { uid: payload.sub, email: payload.email || null };
+}
+
+// ---------------------------------------------------------------------------
+// Upstash Redis — sliding window rate limit per Firebase UID
+// ---------------------------------------------------------------------------
+
+async function checkRateLimit(uid) {
+  const url   = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) throw new Error("Upstash not configured");
+
+  const key         = `ratelimit:gemini:${uid}`;
+  const now         = Date.now();
+  const windowStart = now - RATE_LIMIT_WINDOW_SEC * 1000;
+
+  // Atomic pipeline: prune old entries → add this request → count → set TTL
+  const pipeline = [
+    ["ZREMRANGEBYSCORE", key, "-inf", windowStart],
+    ["ZADD", key, now, `${now}-${Math.random()}`],
+    ["ZCARD", key],
+    ["EXPIRE", key, RATE_LIMIT_WINDOW_SEC * 2],
+  ];
+
+  const res = await fetch(`${url}/pipeline`, {
+    method: "POST",
+    headers: {
+      Authorization:  `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(pipeline),
+  });
+
+  if (!res.ok) throw new Error("Rate limit check failed");
+
+  const results = await res.json();
+  const count   = results[2]?.result ?? results[2];
+
+  return {
+    allowed:   count <= RATE_LIMIT_REQUESTS,
+    count,
+    limit:     RATE_LIMIT_REQUESTS,
+    remaining: Math.max(0, RATE_LIMIT_REQUESTS - count),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Main handler
+// ---------------------------------------------------------------------------
 
 export default async function handler(req, res) {
-  const origin = req.headers.origin || "";
+  const origin  = req.headers.origin || "";
   const allowed = (process.env.ALLOWED_ORIGINS || "")
     .split(",")
     .map((s) => s.trim())
@@ -25,7 +163,7 @@ export default async function handler(req, res) {
 
   if (allowOrigin) res.setHeader("Access-Control-Allow-Origin", allowOrigin);
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Vary", "Origin");
 
   if (req.method === "OPTIONS") {
@@ -40,6 +178,40 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: { message: "Origin not allowed" } });
   }
 
+  // ── Firebase token verification ──────────────────────────────────────────
+  const authHeader = req.headers.authorization || "";
+  const idToken    = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+  if (!idToken) {
+    return res.status(401).json({ error: { message: "Authentication required" } });
+  }
+
+  let user;
+  try {
+    user = await verifyFirebaseToken(idToken);
+  } catch (err) {
+    return res.status(401).json({ error: { message: `Invalid token: ${err.message}` } });
+  }
+
+  // ── Per-user rate limiting (20 req / 60 s) ───────────────────────────────
+  try {
+    const rl = await checkRateLimit(user.uid);
+    res.setHeader("X-RateLimit-Limit",     rl.limit);
+    res.setHeader("X-RateLimit-Remaining", rl.remaining);
+
+    if (!rl.allowed) {
+      return res.status(429).json({
+        error: {
+          message: `Rate limit exceeded — max ${RATE_LIMIT_REQUESTS} requests per ${RATE_LIMIT_WINDOW_SEC}s.`,
+        },
+      });
+    }
+  } catch (err) {
+    // Redis down → log but don't block the user
+    console.error("[rate-limit] Redis error:", err.message);
+  }
+
+  // ── Gemini proxy ─────────────────────────────────────────────────────────
   const key = process.env.GEMINI_API_KEY;
   if (!key) {
     return res

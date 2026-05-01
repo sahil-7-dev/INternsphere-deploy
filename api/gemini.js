@@ -21,14 +21,15 @@ export const config = {
 };
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-const RATE_LIMIT_REQUESTS   = parseInt(process.env.RATE_LIMIT_REQUESTS   || "10",  10); // 10 req/min
+const RATE_LIMIT_REQUESTS   = parseInt(process.env.RATE_LIMIT_REQUESTS   || "10",  10);
 const RATE_LIMIT_WINDOW_SEC = parseInt(process.env.RATE_LIMIT_WINDOW_SEC || "60",  10);
-const DAILY_LIMIT_REQUESTS  = parseInt(process.env.DAILY_LIMIT_REQUESTS  || "80",  10); // 80 req/day
+const DAILY_LIMIT_REQUESTS  = parseInt(process.env.DAILY_LIMIT_REQUESTS  || "80",  10);
 
 // ---------------------------------------------------------------------------
 // Firebase token verification
-// Uses Google's public key endpoint — no firebase-admin SDK needed,
-// keeping the cold-start fast.
+// Google's public key endpoint returns full X.509 certificates (PEM).
+// crypto.subtle.importKey("spki") requires bare SubjectPublicKeyInfo DER,
+// not the full cert — so we extract the SPKI block from the cert DER first.
 // ---------------------------------------------------------------------------
 
 let _cachedKeys = null;
@@ -52,49 +53,85 @@ async function getFirebasePublicKeys() {
 
 function b64UrlDecode(str) {
   const padded = str + "=".repeat((4 - (str.length % 4)) % 4);
-  return Buffer.from(padded, "base64");
+  return Buffer.from(padded, "base64url");
+}
+
+// Extract the SubjectPublicKeyInfo (SPKI) SEQUENCE from a full X.509 cert DER.
+// Google's /x509/ endpoint returns PEM-encoded X.509 certs, not bare public keys.
+// crypto.subtle.importKey("spki") needs bare SPKI DER, so we walk the ASN.1
+// structure to find and slice out the SPKI block.
+function extractSpkiFromCertDer(certDer) {
+  // RSA OID: 1.2.840.113549.1.1.1 encoded as DER OID bytes
+  const rsaOid = Buffer.from("2a864886f70d010101", "hex");
+  const oidIdx = certDer.indexOf(rsaOid);
+  if (oidIdx === -1) throw new Error("RSA OID not found in certificate");
+
+  // Walk backwards from the OID to find the SEQUENCE (0x30) tag
+  // that starts the subjectPublicKeyInfo block
+  let seqStart = oidIdx - 1;
+  while (seqStart >= 0 && certDer[seqStart] !== 0x30) seqStart--;
+  if (seqStart < 0) throw new Error("SPKI SEQUENCE not found in certificate");
+
+  // Parse the ASN.1 length at seqStart+1 to get the full SPKI block length
+  let pos = seqStart + 1;
+  let len;
+  if (certDer[pos] & 0x80) {
+    const numLenBytes = certDer[pos] & 0x7f;
+    len = 0;
+    for (let i = 0; i < numLenBytes; i++) {
+      pos++;
+      len = (len << 8) | certDer[pos];
+    }
+    pos++;
+  } else {
+    len = certDer[pos];
+    pos++;
+  }
+
+  return certDer.slice(seqStart, pos + len);
 }
 
 async function verifyFirebaseToken(idToken) {
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-if (!projectId) throw new Error("FIREBASE_PROJECT_ID not configured");
-console.log("[debug] projectId:", JSON.stringify(projectId));
-console.log("[debug] token aud:", payload.aud);
-console.log("[debug] token iss:", payload.iss);
+  const projectId = process.env.FIREBASE_PROJECT_ID?.trim();
+  if (!projectId) throw new Error("FIREBASE_PROJECT_ID not configured");
 
   const parts = idToken.split(".");
   if (parts.length !== 3) throw new Error("Invalid token format");
 
   const [headerB64, payloadB64, sigB64] = parts;
 
-  const header  = JSON.parse(b64UrlDecode(headerB64).toString("utf8"));
-  const payload = JSON.parse(b64UrlDecode(payloadB64).toString("utf8"));
+  const header  = JSON.parse(Buffer.from(headerB64,  "base64url").toString("utf8"));
+  const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
 
   const now = Math.floor(Date.now() / 1000);
 
   if (!payload.exp || payload.exp < now)        throw new Error("Token expired");
   if (!payload.iat || now - payload.iat > 3600) throw new Error("Token too old");
-  if (payload.aud !== projectId)                throw new Error("Token audience mismatch");
+  if (payload.aud !== projectId)                throw new Error(`Token audience mismatch: got "${payload.aud}", expected "${projectId}"`);
   if (payload.iss !== `https://securetoken.google.com/${projectId}`)
-    throw new Error("Token issuer mismatch");
+    throw new Error(`Token issuer mismatch: got "${payload.iss}"`);
 
   const keys = await getFirebasePublicKeys();
-  const cert = keys[header.kid];
-  if (!cert) throw new Error("Unknown token key ID");
+  const certPem = keys[header.kid];
+  if (!certPem) throw new Error(`Unknown token key ID: ${header.kid}`);
 
-  const pemBody = cert.replace(/-----[^-]+-----/g, "").replace(/\s/g, "");
+  // Decode the full X.509 cert from PEM
+  const pemBody = certPem.replace(/-----[^-]+-----/g, "").replace(/\s/g, "");
   const certDer = Buffer.from(pemBody, "base64");
+
+  // Extract just the SPKI block that crypto.subtle.importKey("spki") expects
+  const spkiDer = extractSpkiFromCertDer(certDer);
 
   const cryptoKey = await crypto.subtle.importKey(
     "spki",
-    certDer,
+    spkiDer,
     { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
     false,
     ["verify"]
   );
 
   const signingInput = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
-  const signature    = b64UrlDecode(sigB64);
+  const signature    = Buffer.from(sigB64, "base64url");
 
   const valid = await crypto.subtle.verify(
     "RSASSA-PKCS1-v1_5",
@@ -122,25 +159,17 @@ async function checkRateLimit(uid) {
   const now         = Date.now();
   const windowStart = now - RATE_LIMIT_WINDOW_SEC * 1000;
 
-  // Daily key resets at UTC midnight — key includes the UTC date
-  const utcDate  = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+  const utcDate   = new Date().toISOString().slice(0, 10);
   const minuteKey = `ratelimit:gemini:${uid}`;
   const dailyKey  = `ratelimit:daily:${uid}:${utcDate}`;
 
-  // Atomic pipeline:
-  //  [0] prune old minute-window entries
-  //  [1] add this request to minute window
-  //  [2] count minute window
-  //  [3] set minute key TTL
-  //  [4] increment daily counter
-  //  [5] set daily key TTL (expires in 48 h to be safe)
   const pipeline = [
     ["ZREMRANGEBYSCORE", minuteKey, "-inf", windowStart],
     ["ZADD", minuteKey, now, `${now}-${Math.random()}`],
     ["ZCARD", minuteKey],
     ["EXPIRE", minuteKey, RATE_LIMIT_WINDOW_SEC * 2],
     ["INCR", dailyKey],
-    ["EXPIRE", dailyKey, 172800], // 48 h
+    ["EXPIRE", dailyKey, 172800],
   ];
 
   const res = await fetch(`${url}/pipeline`, {
@@ -154,7 +183,7 @@ async function checkRateLimit(uid) {
 
   if (!res.ok) throw new Error("Rate limit check failed");
 
-  const results    = await res.json();
+  const results     = await res.json();
   const minuteCount = results[2]?.result ?? results[2];
   const dailyCount  = results[4]?.result ?? results[4];
 
@@ -162,14 +191,13 @@ async function checkRateLimit(uid) {
   const dailyAllowed  = dailyCount  <= DAILY_LIMIT_REQUESTS;
 
   return {
-    allowed:          minuteAllowed && dailyAllowed,
+    allowed:         minuteAllowed && dailyAllowed,
     minuteCount,
     dailyCount,
-    minuteLimit:      RATE_LIMIT_REQUESTS,
-    dailyLimit:       DAILY_LIMIT_REQUESTS,
-    minuteRemaining:  Math.max(0, RATE_LIMIT_REQUESTS  - minuteCount),
-    dailyRemaining:   Math.max(0, DAILY_LIMIT_REQUESTS - dailyCount),
-    // which limit was hit (for the error message)
+    minuteLimit:     RATE_LIMIT_REQUESTS,
+    dailyLimit:      DAILY_LIMIT_REQUESTS,
+    minuteRemaining: Math.max(0, RATE_LIMIT_REQUESTS  - minuteCount),
+    dailyRemaining:  Math.max(0, DAILY_LIMIT_REQUESTS - dailyCount),
     limitHit: !dailyAllowed ? "daily" : !minuteAllowed ? "minute" : null,
   };
 }
@@ -234,7 +262,6 @@ export default async function handler(req, res) {
       return res.status(429).json({ error: { message: msg } });
     }
   } catch (err) {
-    // Redis down → log but don't block the user
     console.error("[rate-limit] Redis error:", err.message);
   }
 

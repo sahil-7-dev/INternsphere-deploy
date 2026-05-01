@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>InternSphere — AI Resume Analyzer</title>
+
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+  <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin />
+
+  <script>(function () { try { var t = localStorage.getItem("theme") || localStorage.getItem("internsphere_theme") || "dark", h = document.documentElement; h.classList.remove("dark", "light", "theme-dark", "theme-light"); if (t === "light") { h.classList.add("theme-light", "light"); h.style.colorScheme = "light"; h.style.backgroundColor = "#f6f8fb" } else { h.classList.add("theme-dark", "dark"); h.style.colorScheme = "dark"; h.style.backgroundColor = "#111113" } var s = document.createElement("style"); s.textContent = "html.theme-light body,html.light body{background:#f6f8fb;color:#0f172a}html.theme-dark body,html.dark body{background:#111113;color:rgba(255,255,255,0.95)}"; (document.head || document.documentElement).appendChild(s) } catch (e) { } })();</script>
+
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/dashboard.css" />
+  <link rel="stylesheet" href="css/notifications.css">
+  <link rel="stylesheet" href="css/modern.css" />
+  <link rel="stylesheet" href="css/ai-theme.css" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/lenis@1.1.20/dist/lenis.css" />
+  <script defer src="https://unpkg.com/lenis@1.1.20/dist/lenis.min.js"></script>
+  <script defer src="js/scroll-init.js"></script>
+
+  <style>
+    .ra-page {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 32px 16px 80px;
+    }
+    .ra-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85rem;
+      opacity: 0.6;
+      text-decoration: none;
+      color: inherit;
+      margin-bottom: 24px;
+      transition: opacity 0.2s;
+    }
+    .ra-back:hover { opacity: 1; }
+    .ra-hero {
+      margin-bottom: 28px;
+    }
+    .ra-hero h1 {
+      font-size: clamp(1.5rem, 4vw, 2rem);
+      font-weight: 800;
+      margin: 0 0 6px;
+      background: linear-gradient(135deg, var(--brand, #7c3aed), #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .ra-hero p {
+      font-size: 0.95rem;
+      opacity: 0.65;
+      margin: 0;
+      line-height: 1.6;
+    }
+    .ra-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+    @media (min-width: 640px) {
+      .ra-grid { grid-template-columns: 1fr 1fr; }
+      .ra-grid .ra-full { grid-column: 1 / -1; }
+    }
+    .ra-stat {
+      background: color-mix(in srgb, var(--surface, #1e1e24) 80%, transparent);
+      border: 1px solid color-mix(in srgb, var(--text, #fff) 10%, transparent);
+      border-radius: 14px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .ra-stat-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      opacity: 0.5;
+    }
+    .ra-stat-val {
+      font-size: 2rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .ra-drop-zone {
+      border: 2px dashed color-mix(in srgb, var(--brand, #7c3aed) 50%, transparent);
+      border-radius: 16px;
+      padding: 48px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      background: color-mix(in srgb, var(--brand, #7c3aed) 4%, transparent);
+    }
+    .ra-drop-zone:hover, .ra-drop-zone.drag-over {
+      border-color: var(--brand, #7c3aed);
+      background: color-mix(in srgb, var(--brand, #7c3aed) 8%, transparent);
+    }
+    .ra-drop-icon { font-size: 2.5rem; margin-bottom: 12px; }
+    .ra-drop-title { font-size: 1rem; font-weight: 700; margin: 0 0 4px; }
+    .ra-drop-sub { font-size: 0.83rem; opacity: 0.55; margin: 0; }
+  </style>
+</head>
+
+<body data-footer="minimal">
+
+  <!-- topbar -->
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <span class="brand" aria-label="hidden">
+        <img src="assets/images/Internsphere logo.png" alt="InternSphere logo" width="44px" height="auto" class="brand-logo" />
+        <span class="brand-name">InternSphere</span>
+      </span>
+      <div class="topbar-mid"></div>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle theme" aria-pressed="true" title="Toggle theme">
+        <span class="toggle-ico" aria-hidden="true">🌙</span>
+        <span class="toggle-label">Dark</span>
+      </button>
+      <button class="profile" type="button" aria-label="Profile menu">
+        <span class="avatar">S</span>
+        <span class="profile-meta">
+          <b id="userName">User</b>
+          <small id="userMeta">Student</small>
+        </span>
+      </button>
+    </div>
+  </header>
+
+  <div class="ra-page">
+
+    <a href="dashboard.html" class="ra-back">← Back to Dashboard</a>
+
+    <div class="ra-hero">
+      <h1>✦ AI Resume Analyzer</h1>
+      <p>Upload your PDF resume for an instant ATS score, section-by-section breakdown, skill gap analysis, and role-fit scoring — powered by Gemini.</p>
+    </div>
+
+    <!-- main analyzer card -->
+    <article class="card ra-full" id="resumeAnalyzerCard" style="margin-bottom:20px">
+      <div class="card-head">
+        <div>
+          <h2>Analyze your resume</h2>
+          <p class="muted" id="raMuted">Drop your PDF below to get started.</p>
+        </div>
+        <span class="chip" id="raChip">READY</span>
+      </div>
+
+      <!-- drop zone -->
+      <div id="raIdle">
+        <div class="ra-drop-zone" id="raDropZone">
+          <div class="ra-drop-icon">📄</div>
+          <p class="ra-drop-title">Drop your resume here</p>
+          <p class="ra-drop-sub">PDF only · max 10 MB</p>
+        </div>
+      </div>
+
+      <!-- role selector -->
+      <div id="raRoleWrap" style="margin-top:16px;margin-bottom:4px">
+        <label style="font-size:11px;font-weight:700;opacity:0.55;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Target role (optional)</label>
+        <select id="raRoleSelect" style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid color-mix(in srgb,var(--text) 16%,transparent);background:color-mix(in srgb,var(--surface) 60%,transparent);color:var(--text);font-size:13px;cursor:pointer">
+          <option value="">Loading roles…</option>
+        </select>
+        <p id="raRoleHint" style="font-size:11px;opacity:0.5;margin:4px 0 0;min-height:14px"></p>
+      </div>
+
+      <!-- loading -->
+      <div id="raLoading" style="display:none;padding:20px 0">
+        <div class="meter" style="margin:4px 0">
+          <span style="opacity:0.7">Analyzing…</span>
+          <div class="bar"><i id="raLoadBar" style="width:0%;transition:width 3s cubic-bezier(0.16,1,0.3,1)"></i></div>
+          <b style="opacity:0.6;font-family:ui-monospace,monospace" id="raLoadPct">0%</b>
+        </div>
+        <p style="font-size:0.82rem;opacity:0.6;margin:8px 0 0" id="raLoadStep">Parsing PDF…</p>
+      </div>
+
+      <!-- result -->
+      <div id="raResult" style="display:none;margin-top:16px">
+
+        <!-- score stats -->
+        <div class="ra-grid" style="margin-bottom:16px">
+          <div class="ra-stat">
+            <span class="ra-stat-label">ATS Score</span>
+            <span class="ra-stat-val" id="raAtsValBig">0%</span>
+            <div class="meter" style="margin-top:6px">
+              <div class="bar"><i id="raAtsBar" style="width:0%"></i></div>
+            </div>
+          </div>
+          <div class="ra-stat">
+            <span class="ra-stat-label">Skills Match</span>
+            <span class="ra-stat-val" id="raSkillsValBig">0%</span>
+            <div class="meter" style="margin-top:6px">
+              <div class="bar"><i id="raSkillsBar" style="width:0%"></i></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- hidden compat elements resume-analyzer.js writes to -->
+        <span id="raAtsVal" style="display:none"></span>
+        <span id="raSkillsVal" style="display:none"></span>
+
+        <!-- role fit -->
+        <div id="raRoleSection" style="display:none;margin-bottom:12px">
+          <div class="meter">
+            <span id="raRoleName" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Role Fit</span>
+            <div class="bar"><i id="raRoleBar" style="width:0%;transition:width 1s cubic-bezier(0.16,1,0.3,1)"></i></div>
+            <b id="raRoleVal">0%</b>
+          </div>
+          <p id="raRoleFeedback" style="font-size:12px;opacity:0.65;margin:4px 0 8px;line-height:1.5"></p>
+        </div>
+
+        <div class="tip" id="raTip">—</div>
+
+        <details id="raDetails" style="margin-top:14px">
+          <summary style="cursor:pointer;font-size:0.88rem;font-weight:700;opacity:0.78;padding:6px 0">▾ Detailed review</summary>
+          <div id="raDetailsBody" style="margin-top:10px;font-size:0.88rem;line-height:1.6"></div>
+        </details>
+
+        <!-- gap opportunities -->
+        <div id="raGapOpp" style="display:none;margin-top:16px"></div>
+      </div>
+
+      <!-- error -->
+      <div id="raError" style="display:none;margin-top:12px;padding:12px 14px;border-radius:10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;font-size:0.85rem;line-height:1.5"></div>
+
+      <input type="file" id="raFileInput" accept="application/pdf,.pdf" style="display:none">
+
+      <div class="card-foot" style="margin-top:16px">
+        <button class="btn btn-primary" id="raAnalyzeBtn" type="button">Analyze resume</button>
+        <button class="btn btn-ghost" id="raClearBtn" type="button" style="display:none">New analysis</button>
+      </div>
+      <p class="muted" id="raFileName" style="font-size:0.78rem;margin-top:8px;display:none;word-break:break-all"></p>
+    </article>
+
+    <!-- how it works -->
+    <article class="card ra-full">
+      <div class="card-head">
+        <div><h2>How it works</h2></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-top:4px">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <span style="font-size:1.5rem">📤</span>
+          <b style="font-size:0.9rem">1. Upload</b>
+          <p style="font-size:0.82rem;opacity:0.6;margin:0;line-height:1.5">Drop your PDF resume. We never store your file.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <span style="font-size:1.5rem">🎯</span>
+          <b style="font-size:0.9rem">2. Pick a role</b>
+          <p style="font-size:0.82rem;opacity:0.6;margin:0;line-height:1.5">Optionally target a specific internship for role-fit scoring.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <span style="font-size:1.5rem">✦</span>
+          <b style="font-size:0.9rem">3. Get insights</b>
+          <p style="font-size:0.82rem;opacity:0.6;margin:0;line-height:1.5">Receive ATS score, skill gaps, and actionable rewrite tips.</p>
+        </div>
+      </div>
+    </article>
+
+  </div>
+
+  <!-- theme toggle script (minimal, same logic as dashboard) -->
+  <script>
+    (function () {
+      const btn = document.getElementById("themeToggle");
+      const ico = btn?.querySelector(".toggle-ico");
+      const lbl = btn?.querySelector(".toggle-label");
+      function applyTheme(t) {
+        const h = document.documentElement;
+        h.classList.remove("dark","light","theme-dark","theme-light");
+        if (t === "light") { h.classList.add("theme-light","light"); h.style.colorScheme="light"; if(ico) ico.textContent="☀️"; if(lbl) lbl.textContent="Light"; }
+        else { h.classList.add("theme-dark","dark"); h.style.colorScheme="dark"; if(ico) ico.textContent="🌙"; if(lbl) lbl.textContent="Dark"; }
+        localStorage.setItem("theme", t);
+      }
+      applyTheme(localStorage.getItem("theme") || "dark");
+      btn?.addEventListener("click", () => applyTheme(document.documentElement.classList.contains("light") ? "dark" : "light"));
+    })();
+  </script>
+
+  <script type="module" src="js/resume-analyzer.js"></script>
+
+</body>
+</html>

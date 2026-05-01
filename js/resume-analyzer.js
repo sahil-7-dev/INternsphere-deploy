@@ -186,8 +186,8 @@ function renderResult(data) {
   const userMeta = document.getElementById("userMeta");
   if (userMeta) userMeta.textContent = userMeta.textContent.replace(/\d+%\s*ATS/i, `${atsPct}% ATS`);
 
-  animateNumber($("raAtsVal"),    ats,    "%");
-  animateNumber($("raSkillsVal"), skills, "%");
+  animateNumber($("raAtsValBig"),    ats,    "%");
+  animateNumber($("raSkillsValBig"), skills, "%");
   requestAnimationFrame(() => {
     $("raAtsBar").style.width    = ats    + "%";
     $("raSkillsBar").style.width = skills + "%";
@@ -501,10 +501,11 @@ async function runAnalysis(dataUrl, fileName) {
 
     // Load existing history before saving
     const existingHistory = await loadAnalysisHistory(currentUid);
-    const histEntry = { atsScore: data.atsScore, skillsMatch: data.skillsMatch, _ts: Date.now() };
+    const histEntry = { atsScore: data.atsScore, skillsMatch: data.skillsMatch, _ts: Date.now(), _fileName: fileName };
     const incoming  = { ...data, _fileName: fileName, _ts: Date.now(), _role: selectedRole?.title || null, _history: [...existingHistory, histEntry], _uid: currentUid };
 
     renderResult(incoming);
+    renderHistory(incoming._history);
     cacheResult(incoming);
     await saveAnalysis(currentUid, incoming, histEntry);
   } catch (e) {
@@ -512,6 +513,60 @@ async function runAnalysis(dataUrl, fileName) {
     console.error("[resume-analyzer]", e);
     showError(friendlyGeminiError(e));
   }
+}
+
+// ── Past uploads panel ───────────────────────────────────────────────────────
+
+function fmtHistDate(ts) {
+  if (!ts) return "—";
+  try {
+    return new Date(ts).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  } catch { return "—"; }
+}
+
+function renderHistory(history) {
+  const panel = $("raHistoryPanel");
+  const list  = $("raHistoryList");
+  if (!panel || !list) return;
+  if (!Array.isArray(history) || !history.length) {
+    panel.style.display = "none";
+    list.innerHTML = "";
+    return;
+  }
+  const sorted = [...history].sort((a, b) => (b._ts || 0) - (a._ts || 0));
+  list.innerHTML = sorted.map((h) => {
+    const ats    = Math.max(0, Math.min(100, Number(h.atsScore)    || 0));
+    const skills = Math.max(0, Math.min(100, Number(h.skillsMatch) || 0));
+    const name   = esc(h._fileName || "Resume");
+    const ts     = h._ts || 0;
+    return `<li data-ts="${ts}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 4px;border-bottom:1px solid color-mix(in srgb,var(--text) 6%,transparent)">
+      <div style="min-width:0;flex:1">
+        <div style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
+        <div style="font-size:11px;opacity:0.55">${fmtHistDate(ts)}</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;font-size:11.5px;flex-shrink:0">
+        <span style="opacity:0.7">ATS <b style="font-family:ui-monospace,monospace">${ats}%</b></span>
+        <span style="opacity:0.7">Skills <b style="font-family:ui-monospace,monospace">${skills}%</b></span>
+        <button type="button" class="ra-hist-del" data-ts="${ts}" aria-label="Remove this entry"
+                style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:14px;padding:2px 6px;border-radius:4px;line-height:1">×</button>
+      </div>
+    </li>`;
+  }).join("");
+  panel.style.display = "";
+}
+
+async function deleteHistoryEntry(uid, ts) {
+  if (!uid || !ts) return [];
+  const snap = await getDoc(doc(db, "students", uid));
+  const cur  = snap.exists() && Array.isArray(snap.data().resumeAnalysisHistory) ? snap.data().resumeAnalysisHistory : [];
+  const next = cur.filter((h) => Number(h._ts || 0) !== Number(ts));
+  await setDoc(doc(db, "students", uid), { resumeAnalysisHistory: next }, { merge: true });
+  return next;
+}
+
+async function clearAllHistory(uid) {
+  if (!uid) return;
+  await setDoc(doc(db, "students", uid), { resumeAnalysisHistory: [] }, { merge: true });
 }
 
 // ── Persistence ───────────────────────────────────────────────────────────────
@@ -528,6 +583,7 @@ function resetUiToIdle() {
   const detailsBody = $("raDetailsBody"); if (detailsBody) detailsBody.innerHTML = "";
   const tip = $("raTip"); if (tip) tip.textContent = "—";
   const roleSection = $("raRoleSection"); if (roleSection) roleSection.style.display = "none";
+  renderHistory([]);
 
   // Reset KPI ATS card on the dashboard if visible.
   const kpiCards = document.querySelectorAll(".kpi");
@@ -619,7 +675,7 @@ function init() {
   async function handlePdfFile(f) {
     if (!f) return;
     if (!/pdf/i.test(f.type) && !/\.pdf$/i.test(f.name)) { showError("Please upload a PDF file."); return; }
-    if (f.size > 5 * 1024 * 1024) { showError("PDF is too large. Keep it under 5 MB."); return; }
+    if (f.size > 10 * 1024 * 1024) { showError("PDF is too large. Keep it under 10 MB."); return; }
     try { await runAnalysis(await readAsDataURL(f), f.name); }
     catch { showError("Could not read the PDF. Try a different file."); }
   }
@@ -664,6 +720,35 @@ function init() {
     });
   }
 
+  // History panel — per-row delete + clear-all
+  $("raHistoryList")?.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".ra-hist-del");
+    if (!btn || !currentUid) return;
+    if (!confirm("Remove this past analysis from your history?")) return;
+    try {
+      const next = await deleteHistoryEntry(currentUid, btn.dataset.ts);
+      renderHistory(next);
+      const cached = loadCachedResult();
+      if (cached) { cached._history = next; cacheResult(cached); renderResult(cached); }
+    } catch (err) {
+      console.warn("[resume] delete history:", err?.message);
+      showError("Could not remove that entry. Please try again.");
+    }
+  });
+  $("raClearHistoryBtn")?.addEventListener("click", async () => {
+    if (!currentUid) return;
+    if (!confirm("Clear all past analyses? This cannot be undone.")) return;
+    try {
+      await clearAllHistory(currentUid);
+      renderHistory([]);
+      const cached = loadCachedResult();
+      if (cached) { cached._history = []; cacheResult(cached); renderResult(cached); }
+    } catch (err) {
+      console.warn("[resume] clear history:", err?.message);
+      showError("Could not clear history. Please try again.");
+    }
+  });
+
   // Default the UI to idle until auth resolves — prevents leaking a stale
   // cache from a previously logged-in user in this tab.
   resetUiToIdle();
@@ -695,6 +780,7 @@ function init() {
     if (remote) {
       const stamped = { ...remote, _uid: user.uid };
       renderResult(stamped);
+      renderHistory(stamped._history);
       cacheResult(stamped);
       if (remote._fileName) { $("raFileName").style.display = ""; $("raFileName").textContent = "Saved analysis: " + remote._fileName; }
       return;
@@ -704,6 +790,7 @@ function init() {
     // same user (e.g. a refresh during analysis), keep it; otherwise reset.
     if (cached && cached._uid === user.uid) {
       renderResult(cached);
+      renderHistory(cached._history);
       if (cached._fileName) { $("raFileName").style.display = ""; $("raFileName").textContent = "Last analysis: " + cached._fileName; }
       return;
     }

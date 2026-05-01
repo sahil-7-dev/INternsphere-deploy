@@ -311,16 +311,11 @@ async function loadGapOpportunities(missingSkills) {
     const norm = missingSkills.map((s) => String(s).trim().toLowerCase()).filter(Boolean);
     if (!norm.length) { container.style.display = "none"; return; }
 
-    const [_snapA, _snapB] = await Promise.all([
-      getDocs(query(collection(db, "internships"), where("status", "==", "open"), limit(60))),
-      getDocs(query(collection(db, "internships"), where("status", "==", "Open"), limit(60))),
-    ]);
-    const _seen1 = new Set();
-    const snap = { forEach: (fn) => [_snapA, _snapB].forEach(s => s.forEach(d => { if (!_seen1.has(d.id)) { _seen1.add(d.id); fn(d); } })) };
+    const snap = await getDocs(query(collection(db, "internships"), where("status", "==", "open"), limit(60)));
     const matches = [];
     snap.forEach((d) => {
       const data = d.data();
-      const required = (data.skills || data.requiredSkills || []).map((s) => String(s).trim().toLowerCase());
+      const required = parseSkills(data.skills || data.requiredSkills).map((s) => s.toLowerCase());
       const overlap = norm.filter((s) => required.includes(s));
       if (overlap.length) matches.push({ id: d.id, title: data.title || "Internship", companyName: data.companyName || "", skills: overlap });
     });
@@ -349,22 +344,24 @@ async function loadGapOpportunities(missingSkills) {
   }
 }
 
+
+// Normalize skills field — Firestore stores it as a comma string or array
+function parseSkills(raw) {
+  if (Array.isArray(raw)) return raw.map(s => String(s).trim()).filter(Boolean);
+  if (typeof raw === "string") return raw.split(",").map(s => s.trim()).filter(Boolean);
+  return [];
+}
 // ── Role selector ─────────────────────────────────────────────────────────────
 
 async function loadRoleSelector() {
   const sel = $("raRoleSelect");
   if (!sel) return;
   try {
-    const [_snapC, _snapD] = await Promise.all([
-      getDocs(query(collection(db, "internships"), where("status", "==", "open"), limit(40))),
-      getDocs(query(collection(db, "internships"), where("status", "==", "Open"), limit(40))),
-    ]);
-    const _seen2 = new Set();
-    const snap = { forEach: (fn) => [_snapC, _snapD].forEach(s => s.forEach(d => { if (!_seen2.has(d.id)) { _seen2.add(d.id); fn(d); } })) };
+    const snap = await getDocs(query(collection(db, "internships"), where("status", "==", "open"), limit(40)));
     const roles = [];
     snap.forEach((d) => {
       const data = d.data();
-      roles.push({ id: d.id, title: data.title || "Internship", skills: data.skills || data.requiredSkills || [], description: data.description || "" });
+      roles.push({ id: d.id, title: data.title || "Internship", skills: parseSkills(data.skills || data.requiredSkills), description: data.description || "" });
     });
     roles.sort((a, b) => a.title.localeCompare(b.title));
     sel.innerHTML = `<option value="">— General analysis (no specific role) —</option>` +

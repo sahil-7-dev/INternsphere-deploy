@@ -311,7 +311,12 @@ async function loadGapOpportunities(missingSkills) {
     const norm = missingSkills.map((s) => String(s).trim().toLowerCase()).filter(Boolean);
     if (!norm.length) { container.style.display = "none"; return; }
 
-    const snap = await getDocs(query(collection(db, "internships"), where("status", "==", "open"), limit(60)));
+    const [_snapA, _snapB] = await Promise.all([
+      getDocs(query(collection(db, "internships"), where("status", "==", "open"), limit(60))),
+      getDocs(query(collection(db, "internships"), where("status", "==", "Open"), limit(60))),
+    ]);
+    const _seen1 = new Set();
+    const snap = { forEach: (fn) => [_snapA, _snapB].forEach(s => s.forEach(d => { if (!_seen1.has(d.id)) { _seen1.add(d.id); fn(d); } })) };
     const matches = [];
     snap.forEach((d) => {
       const data = d.data();
@@ -350,7 +355,12 @@ async function loadRoleSelector() {
   const sel = $("raRoleSelect");
   if (!sel) return;
   try {
-    const snap = await getDocs(query(collection(db, "internships"), where("status", "==", "open"), limit(40)));
+    const [_snapC, _snapD] = await Promise.all([
+      getDocs(query(collection(db, "internships"), where("status", "==", "open"), limit(40))),
+      getDocs(query(collection(db, "internships"), where("status", "==", "Open"), limit(40))),
+    ]);
+    const _seen2 = new Set();
+    const snap = { forEach: (fn) => [_snapC, _snapD].forEach(s => s.forEach(d => { if (!_seen2.has(d.id)) { _seen2.add(d.id); fn(d); } })) };
     const roles = [];
     snap.forEach((d) => {
       const data = d.data();

@@ -259,7 +259,7 @@
   </style>
 </head>
 
-<body data-footer="minimal">
+<body data-footer="minimal" data-lenis-duration="1">
 
   <!-- topbar -->
   <header class="topbar">
@@ -380,6 +380,19 @@
           <summary style="cursor:pointer;font-size:0.88rem;font-weight:700;opacity:0.78;padding:6px 0">▾ Detailed review</summary>
           <div id="raDetailsBody" style="margin-top:10px;font-size:0.88rem;line-height:1.6"></div>
         </details>
+
+        <!-- past uploads (history) -->
+        <div id="raHistoryPanel" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid color-mix(in srgb,var(--text) 10%,transparent)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <p style="margin:0;font-weight:700;font-size:12px">Past uploads</p>
+            <button type="button" id="raClearHistoryBtn"
+                    style="background:none;border:none;font-size:11px;color:var(--brand);cursor:pointer;padding:2px 6px">
+              Clear all
+            </button>
+          </div>
+          <ul id="raHistoryList" data-lenis-prevent
+              style="max-height:240px;overflow-y:auto;list-style:none;padding:0;margin:0"></ul>
+        </div>
 
         <!-- gap opportunities -->
         <div id="raGapOpp" style="display:none;margin-top:16px"></div>

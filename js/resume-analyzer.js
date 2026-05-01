@@ -315,7 +315,7 @@ async function loadGapOpportunities(missingSkills) {
     const matches = [];
     snap.forEach((d) => {
       const data = d.data();
-      const required = (data.skills || data.requiredSkills || []).map((s) => String(s).trim().toLowerCase());
+      const required = parseSkills(data.skills || data.requiredSkills).map(s => s.toLowerCase());
       const overlap = norm.filter((s) => required.includes(s));
       if (overlap.length) matches.push({ id: d.id, title: data.title || "Internship", companyName: data.companyName || "", skills: overlap });
     });
@@ -344,6 +344,14 @@ async function loadGapOpportunities(missingSkills) {
   }
 }
 
+
+// Normalize skills — Firestore stores as comma string or array
+function parseSkills(raw) {
+  if (Array.isArray(raw)) return raw.map(s => String(s).trim()).filter(Boolean);
+  if (typeof raw === "string") return raw.split(",").map(s => s.trim()).filter(Boolean);
+  return [];
+}
+
 // ── Role selector ─────────────────────────────────────────────────────────────
 
 async function loadRoleSelector() {
@@ -354,7 +362,7 @@ async function loadRoleSelector() {
     const roles = [];
     snap.forEach((d) => {
       const data = d.data();
-      roles.push({ id: d.id, title: data.title || "Internship", skills: data.skills || data.requiredSkills || [], description: data.description || "" });
+      roles.push({ id: d.id, title: data.title || "Internship", skills: parseSkills(data.skills || data.requiredSkills), description: data.description || "" });
     });
     roles.sort((a, b) => a.title.localeCompare(b.title));
     sel.innerHTML = `<option value="">— General analysis (no specific role) —</option>` +

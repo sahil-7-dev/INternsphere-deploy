@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>InternSphere — AI Resume Analyzer</title>
+  <title>InternSphere — TARS Resume Analyzer</title>
 
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
@@ -107,6 +107,155 @@
     .ra-drop-icon { font-size: 2.5rem; margin-bottom: 12px; }
     .ra-drop-title { font-size: 1rem; font-weight: 700; margin: 0 0 4px; }
     .ra-drop-sub { font-size: 0.83rem; opacity: 0.55; margin: 0; }
+
+    /* Role selector — themed custom combobox */
+    .ra-role-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      opacity: 0.55;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-bottom: 6px;
+    }
+    .ra-combo {
+      position: relative;
+    }
+    .ra-combo-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid color-mix(in srgb, var(--text, #fff) 14%, transparent);
+      background: color-mix(in srgb, var(--surface, #1e1e24) 70%, transparent);
+      color: var(--text, #fff);
+      font: inherit;
+      font-size: 13px;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+    .ra-combo-btn:hover {
+      border-color: color-mix(in srgb, var(--brand, #7c3aed) 55%, transparent);
+      background: color-mix(in srgb, var(--surface, #1e1e24) 85%, transparent);
+    }
+    .ra-combo-btn:focus-visible,
+    .ra-combo-btn[aria-expanded="true"] {
+      outline: none;
+      border-color: var(--brand, #7c3aed);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand, #7c3aed) 18%, transparent);
+    }
+    .ra-combo-text {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ra-combo-text.is-placeholder { opacity: 0.55; }
+    .ra-combo-chev {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      color: var(--brand, #7c6bff);
+      transition: transform 0.2s ease;
+    }
+    .ra-combo-btn[aria-expanded="true"] .ra-combo-chev { transform: rotate(180deg); }
+
+    .ra-combo-list {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      z-index: 30;
+      margin: 0;
+      padding: 6px;
+      list-style: none;
+      background: color-mix(in srgb, var(--surface, #1e1e24) 96%, transparent);
+      border: 1px solid color-mix(in srgb, var(--text, #fff) 12%, transparent);
+      border-radius: 12px;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.34), 0 4px 12px rgba(0, 0, 0, 0.18);
+      max-height: min(60vh, 460px);
+      overflow-y: auto;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      opacity: 0;
+      transform: translateY(-4px);
+      pointer-events: none;
+      transition: opacity 0.16s ease, transform 0.16s ease;
+    }
+    .ra-combo-list[data-open="true"] {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    .ra-combo-opt {
+      display: block;
+      padding: 8px 12px;
+      font-size: 13px;
+      color: var(--text, #fff);
+      border-radius: 8px;
+      cursor: pointer;
+      line-height: 1.45;
+      transition: background 0.12s ease;
+    }
+    .ra-combo-opt:hover,
+    .ra-combo-opt[data-active="true"] {
+      background: color-mix(in srgb, var(--brand, #7c3aed) 14%, transparent);
+    }
+    .ra-combo-opt[aria-selected="true"] {
+      background: color-mix(in srgb, var(--brand, #7c3aed) 22%, transparent);
+      font-weight: 600;
+    }
+    .ra-combo-opt-skills {
+      display: block;
+      font-size: 11px;
+      opacity: 0.55;
+      margin-top: 1px;
+    }
+
+    /* Light theme */
+    body.theme-light .ra-combo-btn,
+    html.light .ra-combo-btn {
+      background: #ffffff;
+      color: #0f172a;
+      border-color: rgba(15, 23, 42, 0.14);
+    }
+    body.theme-light .ra-combo-btn:hover,
+    html.light .ra-combo-btn:hover {
+      border-color: rgba(124, 107, 255, 0.55);
+      background: #ffffff;
+    }
+    body.theme-light .ra-combo-list,
+    html.light .ra-combo-list {
+      background: #ffffff;
+      border-color: rgba(15, 23, 42, 0.10);
+      box-shadow: 0 14px 32px rgba(15, 23, 42, 0.10), 0 4px 12px rgba(15, 23, 42, 0.06);
+    }
+    body.theme-light .ra-combo-opt,
+    html.light .ra-combo-opt {
+      color: #0f172a;
+    }
+    body.theme-light .ra-combo-opt:hover,
+    body.theme-light .ra-combo-opt[data-active="true"],
+    html.light .ra-combo-opt:hover,
+    html.light .ra-combo-opt[data-active="true"] {
+      background: rgba(124, 107, 255, 0.10);
+    }
+    body.theme-light .ra-combo-opt[aria-selected="true"],
+    html.light .ra-combo-opt[aria-selected="true"] {
+      background: rgba(124, 107, 255, 0.16);
+    }
+
+    .ra-role-hint {
+      font-size: 11px;
+      opacity: 0.55;
+      margin: 5px 0 0;
+      min-height: 14px;
+    }
   </style>
 </head>
 
@@ -139,8 +288,8 @@
     <a href="dashboard.html" class="ra-back">← Back to Dashboard</a>
 
     <div class="ra-hero">
-      <h1>✦ AI Resume Analyzer</h1>
-      <p>Upload your PDF resume for an instant ATS score, section-by-section breakdown, skill gap analysis, and role-fit scoring — powered by Gemini.</p>
+      <h1>✦ TARS Resume Analyzer</h1>
+      <p>Upload your PDF resume for an instant ATS score, section-by-section breakdown, skill gap analysis, and role-fit scoring — powered by TARS.</p>
     </div>
 
     <!-- main analyzer card -->
@@ -164,11 +313,20 @@
 
       <!-- role selector -->
       <div id="raRoleWrap" style="margin-top:16px;margin-bottom:4px">
-        <label style="font-size:11px;font-weight:700;opacity:0.55;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Target role (optional)</label>
-        <select id="raRoleSelect" style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid color-mix(in srgb,var(--text) 16%,transparent);background:color-mix(in srgb,var(--surface) 60%,transparent);color:var(--text);font-size:13px;cursor:pointer">
-          <option value="">Loading roles…</option>
-        </select>
-        <p id="raRoleHint" style="font-size:11px;opacity:0.5;margin:4px 0 0;min-height:14px"></p>
+        <span class="ra-role-label" id="raRoleLabel">Target role (optional)</span>
+        <div class="ra-combo">
+          <button type="button" class="ra-combo-btn" id="raRoleBtn"
+                  aria-haspopup="listbox" aria-expanded="false"
+                  aria-labelledby="raRoleLabel" aria-controls="raRoleList">
+            <span class="ra-combo-text is-placeholder">Loading roles…</span>
+            <svg class="ra-combo-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+          <ul class="ra-combo-list" id="raRoleList" role="listbox" aria-labelledby="raRoleLabel" data-lenis-prevent></ul>
+        </div>
+        <p id="raRoleHint" class="ra-role-hint"></p>
       </div>
 
       <!-- loading -->

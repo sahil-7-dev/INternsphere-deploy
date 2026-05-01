@@ -138,10 +138,10 @@
               src="assets/images/icon-overview.png" alt="" aria-hidden="true"></span>
           Overview
         </a>
-        <a class="side-link" href="#" id="aiAnalyzerLink">
+        <a class="side-link" href="resume-analyzer.html" id="aiAnalyzerLink">
           <span class="side-ico"><img loading="lazy" decoding="async" class="ai-glow"
-              src="assets/images/icons8-ai-64.png" alt="AI Analyzer" width="25" height="25"></span>
-          AI Analyzer
+              src="assets/images/icons8-ai-64.png" alt="TARS Analyzer" width="25" height="25"></span>
+          TARS Analyzer
         </a>
         <a class="side-link" href="#" id="openTasks">
           <span class="side-ico"><img loading="lazy" decoding="async" class="side-ico-img"
@@ -271,16 +271,9 @@
           <!-- tasks -->
           <article class="card card-lg" id="tasksSection">
             <div class="card-head">
-              <div class="seg">
-                <button class="seg-btn active" type="button" data-filter="all">
-                  All
-                </button>
-                <button class="seg-btn" type="button" data-filter="today">
-                  Today
-                </button>
-                <button class="seg-btn" type="button" data-filter="week">
-                  This week
-                </button>
+              <div>
+                <h2>My Tasks</h2>
+                <p class="muted">Tasks assigned by your company appear here.</p>
               </div>
             </div>
 
@@ -298,13 +291,13 @@
             <article class="card" id="resumeAnalyzerCard" style="cursor:pointer" onclick="location.href='resume-analyzer.html'">
               <div class="card-head">
                 <div>
-                  <h2>AI Resume Analyzer</h2>
+                  <h2>TARS Resume Analyzer</h2>
                   <p class="muted">Get an instant ATS score, skill gaps &amp; role-fit review.</p>
                 </div>
-                <span class="chip">AI</span>
+                <span class="chip">TARS</span>
               </div>
               <p style="font-size:0.88rem;line-height:1.55;margin:4px 0 16px;opacity:0.78">
-                Upload your PDF resume and get a detailed breakdown powered by Gemini — ATS score, section analysis, rewrite tips, and targeted role matching.
+                Upload your PDF resume and get a detailed breakdown powered by TARS — ATS score, section analysis, rewrite tips, and targeted role matching.
               </p>
               <div class="card-foot">
                 <a href="resume-analyzer.html" class="btn btn-primary" style="text-decoration:none">Open Resume Analyzer</a>
@@ -322,7 +315,7 @@
               </div>
               <div id="recommendedList" style="display:flex;flex-direction:column;gap:10px;margin-top:6px"></div>
               <div class="card-foot" id="recommendedFoot" style="display:none">
-                <a href="internship.html" class="btn btn-ghost" style="text-decoration:none">Browse all internships</a>
+                <a href="internshipdetails.html" class="btn btn-ghost" style="text-decoration:none">Browse all internships</a>
               </div>
             </article>
 

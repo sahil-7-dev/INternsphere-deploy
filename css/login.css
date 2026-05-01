@@ -514,6 +514,67 @@ body.light .panel .btn-soft:hover {
   box-shadow: 0 0 0 4px rgba(124, 107, 255, 0.14);
 }
 
+.pwd-wrap {
+  position: relative;
+  display: block;
+}
+
+.pwd-wrap input {
+  padding-right: 44px;
+}
+
+.pwd-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  opacity: 0.7;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.pwd-toggle:hover,
+.pwd-toggle:focus-visible {
+  opacity: 1;
+  color: #7c6bff;
+  background: rgba(124, 107, 255, 0.10);
+  outline: none;
+}
+
+body.theme-light .pwd-toggle,
+body.light .pwd-toggle {
+  color: #475569;
+  opacity: 0.75;
+}
+
+body.theme-light .pwd-toggle:hover,
+body.theme-light .pwd-toggle:focus-visible,
+body.light .pwd-toggle:hover,
+body.light .pwd-toggle:focus-visible {
+  color: #6d5bff;
+  background: rgba(109, 91, 255, 0.10);
+  opacity: 1;
+}
+
+.pwd-ico {
+  width: 18px;
+  height: 18px;
+}
+
+.pwd-toggle .pwd-ico--eye-off { display: none; }
+.pwd-toggle[aria-pressed="true"] .pwd-ico--eye { display: none; }
+.pwd-toggle[aria-pressed="true"] .pwd-ico--eye-off { display: inline; }
+
 .row {
   display: flex;
   align-items: center;

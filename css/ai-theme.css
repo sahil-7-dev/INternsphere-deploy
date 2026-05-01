@@ -1355,23 +1355,6 @@ html.light body .qa-card {
   animation: tarsHeaderPulse 1700ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Subtle glow on the InternSphere brand logo while TARS is responding. */
-@keyframes brandTarsPulse {
-  0%, 100% {
-    filter: drop-shadow(0 0 0 rgba(124, 107, 255, 0));
-    transform: scale(1);
-  }
-  50% {
-    filter: drop-shadow(0 0 12px rgba(124, 107, 255, 0.65))
-            drop-shadow(0 0 22px rgba(168, 85, 247, 0.35));
-    transform: scale(1.045);
-  }
-}
-.brand-pulse-active {
-  animation: brandTarsPulse 1500ms ease-in-out infinite;
-  will-change: filter, transform;
-}
-
 .tars-chat-avatar {
   position: relative;
   width: 36px;

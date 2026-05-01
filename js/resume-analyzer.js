@@ -272,6 +272,10 @@ function renderResult(data) {
 
   // Gap-to-opportunity (async, non-blocking)
   if (currentUid && (data.missingSkills || []).length) loadGapOpportunities(data.missingSkills);
+  else { const g = $("raGapOpp"); if (g) g.style.display = "none"; }
+
+  // Strong-fit roles (always try; hides itself if no qualifying matches)
+  if (currentUid) loadStrongFits(data.detectedSkills || []);
 }
 
 // ── Sparkline ────────────────────────────────────────────────────────────────
@@ -346,6 +350,61 @@ async function loadGapOpportunities(missingSkills) {
   }
 }
 
+
+// ── Strong-fit roles ─────────────────────────────────────────────────────────
+
+async function loadStrongFits(detectedSkills) {
+  const container = $("raStrongFit");
+  if (!container) return;
+  if (!Array.isArray(detectedSkills) || !detectedSkills.length) {
+    container.style.display = "none"; return;
+  }
+  try {
+    const haveSet = new Set(detectedSkills.map((s) => String(s).trim().toLowerCase()).filter(Boolean));
+    if (!haveSet.size) { container.style.display = "none"; return; }
+
+    const snap = await getDocs(query(collection(db, "internships"), where("status", "==", "Open"), limit(60)));
+    const matches = [];
+    snap.forEach((d) => {
+      const data = d.data();
+      const required = parseSkills(data.skills || data.requiredSkills).map((s) => s.toLowerCase());
+      if (!required.length) return;
+      const matched = required.filter((s) => haveSet.has(s));
+      if (matched.length < 2) return;
+      const coverage = matched.length / required.length;
+      if (coverage < 0.75) return;
+      matches.push({
+        id: d.id,
+        title: data.title || "Internship",
+        companyName: data.companyName || "",
+        matched,
+        coveragePct: Math.round(coverage * 100),
+        requiredCount: required.length,
+      });
+    });
+
+    if (!matches.length) { container.style.display = "none"; return; }
+    matches.sort((a, b) => b.coveragePct - a.coveragePct || b.matched.length - a.matched.length);
+    const top = matches.slice(0, 3);
+    container.style.display = "";
+    container.innerHTML = `
+      <div style="padding:12px 14px;border-radius:12px;background:rgba(34,197,94,0.07);border:1px solid rgba(34,197,94,0.2)">
+        <p style="margin:0 0 8px;font-size:12.5px;font-weight:700;color:#22c55e">✦ ${matches.length} role${matches.length !== 1 ? "s" : ""} you're a strong fit for</p>
+        ${top.map((m) => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid color-mix(in srgb,var(--text) 8%,transparent)">
+            <div style="min-width:0">
+              <span style="font-size:12.5px;font-weight:600">${esc(m.title)}</span>
+              ${m.companyName ? `<span style="font-size:11px;opacity:0.55;margin-left:6px">${esc(m.companyName)}</span>` : ""}
+              <div style="font-size:11px;opacity:0.55;margin-top:1px">${m.coveragePct}% skill coverage · ${m.matched.length}/${m.requiredCount} skills</div>
+            </div>
+            <a href="internship-detailss.html?id=${encodeURIComponent(m.id)}" style="font-size:11px;color:#22c55e;text-decoration:none;flex-shrink:0;margin-left:10px;font-weight:600">View →</a>
+          </div>`).join("")}
+      </div>`;
+  } catch (e) {
+    console.warn("[resume] strong fits:", e?.message);
+    container.style.display = "none";
+  }
+}
 
 // Normalize skills — Firestore stores as comma string or array
 function parseSkills(raw) {
@@ -580,6 +639,7 @@ function resetUiToIdle() {
   setState("idle");
   const fileName = $("raFileName"); if (fileName) { fileName.style.display = "none"; fileName.textContent = ""; }
   const gap = $("raGapOpp"); if (gap) { gap.style.display = "none"; gap.innerHTML = ""; }
+  const fit = $("raStrongFit"); if (fit) { fit.style.display = "none"; fit.innerHTML = ""; }
   const detailsBody = $("raDetailsBody"); if (detailsBody) detailsBody.innerHTML = "";
   const tip = $("raTip"); if (tip) tip.textContent = "—";
   const roleSection = $("raRoleSection"); if (roleSection) roleSection.style.display = "none";

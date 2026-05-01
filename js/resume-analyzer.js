@@ -322,6 +322,8 @@ async function loadGapOpportunities(missingSkills) {
 
     if (!matches.length) { container.style.display = "none"; return; }
     const top = matches.slice(0, 3);
+    const skillsParam = encodeURIComponent(norm.slice(0, 5).join(","));
+    const listingsHref = `internshipdetails.html?skills=${skillsParam}`;
 
     container.style.display = "";
     container.innerHTML = `
@@ -334,9 +336,9 @@ async function loadGapOpportunities(missingSkills) {
               ${m.companyName ? `<span style="font-size:11px;opacity:0.55;margin-left:6px">${esc(m.companyName)}</span>` : ""}
               <div style="font-size:11px;opacity:0.5;margin-top:1px">Needs: ${m.skills.map(esc).join(", ")}</div>
             </div>
-            <a href="internshipdetails.html?id=${encodeURIComponent(m.id)}" style="font-size:11px;color:var(--brand);text-decoration:none;flex-shrink:0;margin-left:10px">View →</a>
+            <a href="internship-detailss.html?id=${encodeURIComponent(m.id)}" style="font-size:11px;color:var(--brand);text-decoration:none;flex-shrink:0;margin-left:10px">View →</a>
           </div>`).join("")}
-        ${matches.length > 3 ? `<p style="margin:8px 0 0;font-size:11px;opacity:0.5">+${matches.length - 3} more on the <a href="internship.html" style="color:var(--brand)">listings page</a></p>` : ""}
+        <p style="margin:10px 0 0;font-size:11px;opacity:0.6">${matches.length > 3 ? `+${matches.length - 3} more — ` : ""}<a href="${listingsHref}" style="color:var(--brand);font-weight:600">Browse all roles needing these skills →</a></p>
       </div>`;
   } catch (e) {
     console.warn("[resume] gap opportunities:", e?.message);
@@ -355,28 +357,127 @@ function parseSkills(raw) {
 // ── Role selector ─────────────────────────────────────────────────────────────
 
 async function loadRoleSelector() {
-  const sel = $("raRoleSelect");
-  if (!sel) return;
+  const wrap = $("raRoleWrap");
+  const btn  = $("raRoleBtn");
+  const list = $("raRoleList");
+  const text = btn?.querySelector(".ra-combo-text");
+  const hint = $("raRoleHint");
+  if (!wrap || !btn || !list || !text) return;
+
+  const PLACEHOLDER = "— General analysis (no specific role) —";
+  let roles = [];
+  let items = [];           // [{ id, title, skills }] including the placeholder at index 0
+  let activeIndex = 0;
+
+  function setButtonLabel(label, isPlaceholder) {
+    text.textContent = label;
+    text.classList.toggle("is-placeholder", !!isPlaceholder);
+  }
+
+  function renderOptions() {
+    list.innerHTML = items.map((r, i) => {
+      const skillsLine = r.skills?.length ? `<span class="ra-combo-opt-skills">${esc(r.skills.slice(0, 3).join(", "))}</span>` : "";
+      const sel = (selectedRole?.id || "") === r.id;
+      return `<li role="option" data-index="${i}" data-value="${esc(r.id)}" class="ra-combo-opt" aria-selected="${sel}">
+        <span>${esc(r.title)}</span>${skillsLine}
+      </li>`;
+    }).join("");
+  }
+
+  function updateActive() {
+    const opts = list.children;
+    for (let i = 0; i < opts.length; i++) opts[i].setAttribute("data-active", String(i === activeIndex));
+    const opt = opts[activeIndex];
+    if (opt) opt.scrollIntoView({ block: "nearest" });
+  }
+
+  function openList() {
+    btn.setAttribute("aria-expanded", "true");
+    list.dataset.open = "true";
+    const selIdx = items.findIndex((r) => (selectedRole?.id || "") === r.id);
+    activeIndex = selIdx >= 0 ? selIdx : 0;
+    updateActive();
+  }
+
+  function closeList() {
+    btn.setAttribute("aria-expanded", "false");
+    list.dataset.open = "false";
+  }
+
+  function pick(idx) {
+    const r = items[idx];
+    if (!r) return;
+    selectedRole = r.id ? roles.find((x) => x.id === r.id) || null : null;
+    setButtonLabel(r.title, !r.id);
+    Array.from(list.children).forEach((li) => li.setAttribute("aria-selected", String(li.dataset.value === r.id)));
+    if (hint) hint.textContent = selectedRole ? `Will score against: ${selectedRole.title}` : "";
+    closeList();
+    btn.focus();
+  }
+
   try {
     const snap = await getDocs(query(collection(db, "internships"), where("status", "==", "Open"), limit(40)));
-    const roles = [];
     snap.forEach((d) => {
       const data = d.data();
       roles.push({ id: d.id, title: data.title || "Internship", skills: parseSkills(data.skills || data.requiredSkills), description: data.description || "" });
     });
     roles.sort((a, b) => a.title.localeCompare(b.title));
-    sel.innerHTML = `<option value="">— General analysis (no specific role) —</option>` +
-      roles.map((r) => `<option value="${esc(r.id)}">${esc(r.title)}${r.skills.length ? ` · ${r.skills.slice(0, 3).join(", ")}` : ""}</option>`).join("");
-    sel.addEventListener("change", () => {
-      selectedRole = roles.find((r) => r.id === sel.value) || null;
-      const hint = $("raRoleHint");
-      if (hint) hint.textContent = selectedRole ? `Will score against: ${selectedRole.title}` : "";
-    });
+    items = [{ id: "", title: PLACEHOLDER, skills: [] }, ...roles];
+    renderOptions();
+    setButtonLabel(PLACEHOLDER, true);
   } catch (e) {
     console.warn("[resume] role selector:", e?.message);
-    const wrap = $("raRoleWrap");
-    if (wrap) wrap.style.display = "none";
+    wrap.style.display = "none";
+    return;
   }
+
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (btn.getAttribute("aria-expanded") === "true") closeList();
+    else openList();
+  });
+
+  list.addEventListener("click", (e) => {
+    const li = e.target.closest(".ra-combo-opt");
+    if (!li) return;
+    pick(parseInt(li.dataset.index, 10));
+  });
+
+  btn.addEventListener("keydown", (e) => {
+    const open = btn.getAttribute("aria-expanded") === "true";
+    if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      openList();
+      return;
+    }
+    if (!open) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      activeIndex = Math.min(items.length - 1, activeIndex + 1);
+      updateActive();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      activeIndex = Math.max(0, activeIndex - 1);
+      updateActive();
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      activeIndex = 0;
+      updateActive();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      activeIndex = items.length - 1;
+      updateActive();
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      pick(activeIndex);
+    } else if (e.key === "Escape" || e.key === "Tab") {
+      closeList();
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!wrap.contains(e.target)) closeList();
+  });
 }
 
 // ── Run analysis ──────────────────────────────────────────────────────────────
@@ -401,7 +502,7 @@ async function runAnalysis(dataUrl, fileName) {
     // Load existing history before saving
     const existingHistory = await loadAnalysisHistory(currentUid);
     const histEntry = { atsScore: data.atsScore, skillsMatch: data.skillsMatch, _ts: Date.now() };
-    const incoming  = { ...data, _fileName: fileName, _ts: Date.now(), _role: selectedRole?.title || null, _history: [...existingHistory, histEntry] };
+    const incoming  = { ...data, _fileName: fileName, _ts: Date.now(), _role: selectedRole?.title || null, _history: [...existingHistory, histEntry], _uid: currentUid };
 
     renderResult(incoming);
     cacheResult(incoming);
@@ -417,6 +518,26 @@ async function runAnalysis(dataUrl, fileName) {
 
 function cacheResult(obj) { try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(obj)); } catch {} }
 function loadCachedResult() { try { const s = sessionStorage.getItem(CACHE_KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
+function clearCachedResult() { try { sessionStorage.removeItem(CACHE_KEY); } catch {} }
+
+function resetUiToIdle() {
+  clearCachedResult();
+  setState("idle");
+  const fileName = $("raFileName"); if (fileName) { fileName.style.display = "none"; fileName.textContent = ""; }
+  const gap = $("raGapOpp"); if (gap) { gap.style.display = "none"; gap.innerHTML = ""; }
+  const detailsBody = $("raDetailsBody"); if (detailsBody) detailsBody.innerHTML = "";
+  const tip = $("raTip"); if (tip) tip.textContent = "—";
+  const roleSection = $("raRoleSection"); if (roleSection) roleSection.style.display = "none";
+
+  // Reset KPI ATS card on the dashboard if visible.
+  const kpiCards = document.querySelectorAll(".kpi");
+  const atsCard  = kpiCards[3];
+  const tag = atsCard?.querySelector(".kpi-tag");
+  if (tag && /ATS/i.test(tag.textContent || "")) {
+    const valEl = atsCard.querySelector(".kpi-val"); if (valEl) valEl.textContent = "0%";
+    const subEl = atsCard.querySelector(".kpi-sub"); if (subEl) subEl.textContent = "Upload a resume to see your score";
+  }
+}
 
 async function loadAnalysisHistory(uid) {
   if (!uid) return [];
@@ -426,16 +547,35 @@ async function loadAnalysisHistory(uid) {
   } catch { return []; }
 }
 
-async function loadSavedAnalysis(uid) {
+async function loadStudentData(uid) {
   if (!uid) return null;
   try {
     const snap = await getDoc(doc(db, "students", uid));
-    if (!snap.exists()) return null;
-    const d = snap.data();
-    const analysis = d.resumeAnalysis || null;
-    if (analysis) analysis._history = Array.isArray(d.resumeAnalysisHistory) ? d.resumeAnalysisHistory : [];
-    return analysis;
+    return snap.exists() ? snap.data() : null;
   } catch (e) { console.warn("[resume] load:", e?.message); return null; }
+}
+
+function updateTopbarIdentity(name, profilePic) {
+  const userName = $("userName");
+  const avatar = document.querySelector(".topbar .avatar");
+  if (userName) userName.textContent = (name || "User").split(" ")[0];
+  if (avatar) {
+    if (profilePic) {
+      avatar.style.backgroundImage = `url(${profilePic})`;
+      avatar.style.backgroundSize = "cover";
+      avatar.style.backgroundPosition = "center";
+      avatar.textContent = "";
+    } else {
+      avatar.style.backgroundImage = "";
+      avatar.textContent = (name || "U").slice(0, 1).toUpperCase();
+    }
+  }
+}
+
+function clearTopbarIdentity() {
+  const userName = $("userName"); if (userName) userName.textContent = "User";
+  const avatar = document.querySelector(".topbar .avatar");
+  if (avatar) { avatar.style.backgroundImage = ""; avatar.textContent = "S"; }
 }
 
 async function saveAnalysis(uid, analysis, histEntry) {
@@ -464,7 +604,7 @@ function init() {
     setState("idle");
     $("raFileName").style.display = "none";
     const gap = $("raGapOpp"); if (gap) gap.style.display = "none";
-    try { sessionStorage.removeItem(CACHE_KEY); } catch {}
+    clearCachedResult();
   });
 
   const triggerAnalyzer = (e) => {
@@ -476,38 +616,99 @@ function init() {
   $("uploadResumeBtn")?.addEventListener("click", triggerAnalyzer);
   document.getElementById("aiAnalyzerLink")?.addEventListener("click", triggerAnalyzer);
 
-  fileInput.addEventListener("change", async () => {
-    const f = fileInput.files?.[0];
+  async function handlePdfFile(f) {
     if (!f) return;
-    fileInput.value = "";
     if (!/pdf/i.test(f.type) && !/\.pdf$/i.test(f.name)) { showError("Please upload a PDF file."); return; }
     if (f.size > 5 * 1024 * 1024) { showError("PDF is too large. Keep it under 5 MB."); return; }
     try { await runAnalysis(await readAsDataURL(f), f.name); }
     catch { showError("Could not read the PDF. Try a different file."); }
-  });
-
-  const cached = loadCachedResult();
-  if (cached) {
-    renderResult(cached);
-    if (cached._fileName) { $("raFileName").style.display = ""; $("raFileName").textContent = "Last analysis: " + cached._fileName; }
-  } else {
-    const kpiCards = document.querySelectorAll(".kpi");
-    const atsCard  = kpiCards[3];
-    const tag = atsCard?.querySelector(".kpi-tag");
-    if (tag && /ATS/i.test(tag.textContent || "")) {
-      const valEl = atsCard.querySelector(".kpi-val"); if (valEl) valEl.textContent = "0%";
-      const subEl = atsCard.querySelector(".kpi-sub"); if (subEl) subEl.textContent = "Upload a resume to see your score";
-    }
   }
 
+  fileInput.addEventListener("change", async () => {
+    const f = fileInput.files?.[0];
+    fileInput.value = "";
+    await handlePdfFile(f);
+  });
+
+  // Drop zone: click to open picker, drag-and-drop to upload.
+  const dropZone = $("raDropZone");
+  if (dropZone) {
+    dropZone.addEventListener("click", () => fileInput.click());
+    dropZone.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); }
+    });
+    dropZone.setAttribute("role", "button");
+    dropZone.setAttribute("tabindex", "0");
+    dropZone.setAttribute("aria-label", "Upload resume PDF");
+
+    ["dragenter", "dragover"].forEach((evt) => {
+      dropZone.addEventListener(evt, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.add("drag-over");
+      });
+    });
+    ["dragleave", "dragend"].forEach((evt) => {
+      dropZone.addEventListener(evt, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.remove("drag-over");
+      });
+    });
+    dropZone.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove("drag-over");
+      const f = e.dataTransfer?.files?.[0];
+      await handlePdfFile(f);
+    });
+  }
+
+  // Default the UI to idle until auth resolves — prevents leaking a stale
+  // cache from a previously logged-in user in this tab.
+  resetUiToIdle();
+
+  // Profile chip on this sub-page acts as a shortcut back to the dashboard
+  // (which owns the full profile / logout / TARS menu).
+  document.querySelector(".topbar .profile")?.addEventListener("click", () => {
+    window.location.href = "dashboard.html";
+  });
+
   onAuthStateChanged(auth, async (user) => {
-    if (!user) return;
+    if (!user) {
+      currentUid = null;
+      clearTopbarIdentity();
+      resetUiToIdle();
+      return;
+    }
+
     currentUid = user.uid;
-    const remote = await loadSavedAnalysis(user.uid);
-    if (!remote) return;
-    renderResult(remote);
-    cacheResult(remote);
-    if (remote._fileName) { $("raFileName").style.display = ""; $("raFileName").textContent = "Saved analysis: " + remote._fileName; }
+
+    const cached  = loadCachedResult();
+    const stuData = await loadStudentData(user.uid);
+
+    updateTopbarIdentity(stuData?.name || user.displayName || user.email, stuData?.profilePic);
+
+    const remote = stuData?.resumeAnalysis || null;
+    if (remote) remote._history = Array.isArray(stuData.resumeAnalysisHistory) ? stuData.resumeAnalysisHistory : [];
+
+    if (remote) {
+      const stamped = { ...remote, _uid: user.uid };
+      renderResult(stamped);
+      cacheResult(stamped);
+      if (remote._fileName) { $("raFileName").style.display = ""; $("raFileName").textContent = "Saved analysis: " + remote._fileName; }
+      return;
+    }
+
+    // No remote analysis for this user. If the cached entry belongs to this
+    // same user (e.g. a refresh during analysis), keep it; otherwise reset.
+    if (cached && cached._uid === user.uid) {
+      renderResult(cached);
+      if (cached._fileName) { $("raFileName").style.display = ""; $("raFileName").textContent = "Last analysis: " + cached._fileName; }
+      return;
+    }
+
+    resetUiToIdle();
   });
 }
 

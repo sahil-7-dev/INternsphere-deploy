@@ -153,6 +153,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // url param
   const params      = new URLSearchParams(window.location.search);
   const searchQuery = (params.get("search") || "").trim();
+  const urlSkills   = (params.get("skills") || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
 
   // state
   let jobs = [];
@@ -164,6 +168,11 @@ document.addEventListener("DOMContentLoaded", () => {
     duration: "",
     skills:   new Set(),
     sort:     "latest",
+    // True when state.skills was seeded from the URL — the filter then uses
+    // OR semantics ("any of these skills") instead of the default AND. Reset
+    // to false the moment the user toggles a chip so manual selection keeps
+    // the existing AND behaviour.
+    skillsFromUrl: false,
   };
 
   // helpers
@@ -358,9 +367,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const lower = j.skills.map((x) => String(x).toLowerCase());
         // state.skills may contain mixed-case entries from data-skill
         // attributes; compare lowercase-to-lowercase to avoid false misses.
-        return [...state.skills].every((s) =>
-          lower.includes(String(s).toLowerCase())
-        );
+        const tokens = [...state.skills].map((s) => String(s).toLowerCase());
+        // When seeded from a deep-link (e.g. resume analyzer "missing skills"),
+        // we want roles that need ANY of the skills. Manual chip toggling
+        // keeps the stricter ALL-of behaviour.
+        return state.skillsFromUrl
+          ? tokens.some((s) => lower.some((sk) => sk.includes(s) || s.includes(sk)))
+          : tokens.every((s) => lower.includes(s));
       });
     }
 
@@ -408,6 +421,21 @@ document.addEventListener("DOMContentLoaded", () => {
     c.addEventListener("click", () => {
       const s = c.getAttribute("data-skill");
       if (!s) return;
+
+      // User clicking a chip while in URL-seeded mode means "I want to filter
+      // manually now". Clear the URL-seeded tokens + banner, deactivate every
+      // chip, then treat this click as a fresh single selection.
+      if (state.skillsFromUrl) {
+        state.skillsFromUrl = false;
+        state.skills.clear();
+        hideMissingSkillsBanner();
+        document.querySelectorAll(".chip[data-skill]").forEach((x) => x.classList.remove("active"));
+        c.classList.add("active");
+        state.skills.add(s);
+        filterJobs();
+        return;
+      }
+
       c.classList.toggle("active");
       if (state.skills.has(s)) state.skills.delete(s);
       else state.skills.add(s);
@@ -431,7 +459,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   resetBtn?.addEventListener("click", () => {
-    state = { keyword: "", location: "", type: "", duration: "", skills: new Set(), sort: "latest" };
+    state = { keyword: "", location: "", type: "", duration: "", skills: new Set(), sort: "latest", skillsFromUrl: false };
 
     if (keyword)     keyword.value     = "";
     if (locationSel) locationSel.value = "";
@@ -442,12 +470,52 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll('.chip[data-type=""], .chip[data-duration=""]')
       .forEach((c) => c.classList.add("active"));
 
+    hideMissingSkillsBanner();
     filterJobs();
   });
 
   clearBtn?.addEventListener("click", () => resetBtn?.click());
 
   searchInput?.addEventListener("input", filterJobs);
+
+  // ── Missing-skills deep link ───────────────────────────────────────────────
+  // Renders / removes the "Showing roles needing any of: …" banner above
+  // the results list when state.skillsFromUrl is active.
+  function showMissingSkillsBanner(skills) {
+    const resultsSection = document.querySelector(".results");
+    if (!resultsSection) return;
+    let banner = document.getElementById("missingSkillsBanner");
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.id = "missingSkillsBanner";
+      banner.style.cssText = "margin:0 0 14px;padding:10px 14px;border-radius:12px;background:rgba(124,107,255,0.08);border:1px solid rgba(124,107,255,0.22);display:flex;align-items:center;gap:10px;font-size:13px;flex-wrap:wrap";
+      resultsSection.insertBefore(banner, resultsSection.firstChild);
+    }
+    const labels = skills.map((s) => `<span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:rgba(124,107,255,0.16);color:var(--brand);font-size:11.5px;font-weight:600">${s}</span>`).join(" ");
+    banner.innerHTML = `
+      <span style="opacity:0.85">🎯 Showing roles needing any of:</span>
+      <span style="display:inline-flex;gap:6px;flex-wrap:wrap">${labels}</span>
+      <button type="button" id="missingSkillsClear" class="btn btn-ghost" style="margin-left:auto;padding:4px 10px;font-size:12px">Clear</button>`;
+    document.getElementById("missingSkillsClear")?.addEventListener("click", () => resetBtn?.click());
+  }
+  function hideMissingSkillsBanner() {
+    document.getElementById("missingSkillsBanner")?.remove();
+  }
+
+  // Apply ?skills= from the URL: seed state.skills + activate matching chips.
+  // Skills without a chip are still added to state.skills so the filter logic
+  // applies (matched via case-insensitive includes in filterJobs).
+  if (urlSkills.length) {
+    state.skillsFromUrl = true;
+    urlSkills.forEach((s) => state.skills.add(s));
+    document.querySelectorAll(".chip[data-skill]").forEach((c) => {
+      const chipSkill = (c.getAttribute("data-skill") || "").toLowerCase();
+      if (urlSkills.some((s) => s === chipSkill || s.includes(chipSkill) || chipSkill.includes(s))) {
+        c.classList.add("active");
+      }
+    });
+    showMissingSkillsBanner(urlSkills);
+  }
 
   // firestore
   const q = query(collection(db, "internships"));

@@ -21,20 +21,122 @@ const GHOST_VARIANTS = [
   "https://img.icons8.com/color-glass/96/ghost.png",
 ];
 
-// Bats share the flyby — smaller, faster, darker. See
-// https://icons8.com/icons/set/bat for alternates.
+// Bats share the flyby — smaller, faster, darker. Single sprite for a
+// uniform flock; swap the URL to restyle.
 const BAT_VARIANTS = [
   "https://img.icons8.com/color/96/bat.png",
-  "https://img.icons8.com/fluency/96/bat.png",
-  "https://img.icons8.com/emoji/96/bat-emoji.png",
 ];
 
-// Witch cackle plays when a flyby kicks off. Google's public sound library
-// serves this directly. Autoplay policies require prior user interaction —
-// ghost users got there via a button click on /login.html, but the navigation
-// resets that gesture, so first-load audio may be silently denied on some
-// browsers. The .catch() below swallows that failure.
-const WITCH_LAUGH_URL = "https://actions.google.com/sounds/v1/cartoon/witch_cackle.ogg";
+// Witch flyby — primary asset is a local webm clip (animated broom flight).
+// If the video fails to load we fall back to a static icon, then to inline SVG.
+// Her cackle plays synchronized with her on-screen entry rather than the
+// generic flyby start.
+// Witch squadron — leader at the front, followers staggered behind. All
+// share a single flight path (entry → 360° swing → fast sweep out).
+const WITCH_LEADER_URL = "assets/images/_cache/Witch%20leader.webm";
+const WITCH_FOLLOWER_URLS = [
+  "assets/images/_cache/witch2.webm",
+  "assets/images/_cache/witch3.webm",
+];
+const WITCH_VARIANTS = [
+  "https://img.icons8.com/3d-fluency/94/witch-on-broomstick.png",
+  "https://img.icons8.com/color/96/witch.png",
+  "https://img.icons8.com/emoji/96/woman-mage-emoji.png",
+];
+
+// Animated webm assets for the rest of the cast. Filenames have spaces, so
+// they're URL-encoded inline.
+// Only WebMs encoded with an alpha channel (yuva420p) render with a
+// transparent background. MP4/H.264 has no alpha support — the source
+// chroma-key colour (green) shows through instead. To add more variants,
+// re-export the source clips with VP9+alpha:
+//   ffmpeg -i input.mov -c:v libvpx-vp9 -pix_fmt yuva420p -auto-alt-ref 0 out.webm
+const BAT_VIDEO_URLS = [
+  "assets/images/_cache/bat.webm",
+];
+const RUNNING_SKELETON_URL   = "assets/images/_cache/running%20skeleton.webm";
+const ZOMBIE_URL             = "assets/images/_cache/zombie.webm";
+const DANCING_SKELETON_URL   = "assets/images/_cache/dancing%20skeleton.webm";
+const GUITAR_SKELETON_URL    = "assets/images/_cache/guitar%20skeleton.webm";
+const EGYPT_MUMMY_URL        = "assets/images/_cache/egyptmummy.webm";
+const GRAVE_URL              = "assets/images/_cache/Grave.webm";
+
+// Bubble text pools — picked at random per chase so the same lines don't
+// repeat. Tonal mix: panic/comedic for the skeleton, menace/hungry for
+// the zombie. Keep entries short (~25 chars) — bubbles use `white-space:
+// nowrap`, so long lines make very wide bubbles.
+const SKELETON_BUBBLES = [
+  "help me!",
+  "noooo!",
+  "save me!",
+  "AAAAAH!",
+  "stop chasing me!",
+  "i don't wanna die!",
+  "not today!!",
+  "guys??",
+  "this is fine",
+  "skip leg day, big mistake",
+  "i'm too young!",
+  "anyone?? help!",
+  "wait wait wait",
+  "leave me alone!",
+];
+
+const ZOMBIE_BUBBLES = [
+  "grrrr…",
+  "BRAINS",
+  "hungry…",
+  "come back!",
+  "yum yum",
+  "rrraaagh",
+  "tasty bones",
+  "calcium…",
+  "snack escaping",
+  "wait up!!",
+  "om nom",
+  "feast time",
+  "you're mine",
+  "i'm starving",
+  "share the meat",
+];
+
+// Inline SVG fallback when the CDN is unreachable. Stylised witch on a broom.
+const WITCH_ICON_FALLBACK =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 64">' +
+      '<line x1="14" y1="52" x2="86" y2="44" stroke="#7c3a0e" stroke-width="3" stroke-linecap="round"/>' +
+      '<path d="M86 44 L96 36 L96 52 L86 50 Z" fill="#caa45a" stroke="#7c3a0e" stroke-width="1"/>' +
+      '<ellipse cx="50" cy="38" rx="14" ry="7" fill="#1a1a2e"/>' +
+      '<circle cx="44" cy="22" r="8" fill="#9be7a3"/>' +
+      '<circle cx="42" cy="22" r="1.2" fill="#1f2027"/>' +
+      '<path d="M36 19 L44 3 L52 19 Z" fill="#221833"/>' +
+      '<rect x="34" y="19" width="20" height="3" fill="#221833"/>' +
+      '<rect x="42" y="14" width="4" height="2" fill="#7c6bff"/>' +
+      '<path d="M40 24 Q42 32 38 35 Q35 31 38 26 Z" fill="#3a1a3a"/>' +
+    '</svg>'
+  );
+
+// Witch cackle. Local file is preferred — drop your scary laugh at the path
+// below and it'll be used automatically. If the local file is missing or the
+// browser fails to load it, we fall back to Google's public cartoon cackle.
+//
+// Autoplay policies require prior user interaction. The login button click
+// doesn't carry across the navigation (transient activation expires), so we
+// "unlock" the audio on the first click/key/touch the user makes on this
+// page (see setupAudioUnlock below). After that, playback works for the
+// remainder of the session.
+const WITCH_LAUGH_LOCAL    = "assets/audio/witch-laugh.mp3";
+const WITCH_LAUGH_FALLBACK = "https://actions.google.com/sounds/v1/cartoon/witch_cackle.ogg";
+
+// Skeleton's panic-cry. Loops while he's running from the zombie. Plays
+// only when a chase is active — same autoplay-unlock plumbing as the
+// witch cackle below.
+const SKELE_CRY_LOCAL      = "assets/audio/skele-crying.mp3";
+
+// Guitarist riff. Loops the entire time the band is on screen, snaps off
+// the moment they leave. ~2-second clip designed to loop seamlessly.
+const GUITARIST_LOCAL      = "assets/audio/guitarist.mp3";
 
 // ─── Cinematic intro assets ───
 const GHOST_INTRO_ASSETS = {
@@ -80,6 +182,13 @@ function installGreetingModal() {
     if (document.getElementById("ghostGreetingModal")) return;
     try { sessionStorage.setItem(GREETING_SHOWN_KEY, "1"); } catch {}
 
+    // Use the user's first name from the topbar if it's been hydrated yet.
+    const rawName = document.getElementById("userName")?.textContent?.trim();
+    const firstName = rawName && rawName !== "User" ? rawName : "there";
+    const safeName = firstName.replace(/[<>&"]/g, (c) => ({
+      "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;"
+    }[c]));
+
     const backdrop = document.createElement("div");
     backdrop.id = "ghostGreetingModal";
     backdrop.className = "ghost-modal-backdrop";
@@ -88,15 +197,18 @@ function installGreetingModal() {
         '<button type="button" class="ghost-modal__close" aria-label="Skip">×</button>' +
         '<img class="ghost-modal__icon" src="' + GHOST_ICON_URL + '" alt="" ' +
         'onerror="this.onerror=null;this.src=\'' + GHOST_ICON_FALLBACK + '\'">' +
-        '<h2 id="ghostModalTitle" class="ghost-modal__title">Welcome back, Ghost 👻</h2>' +
+        '<h2 id="ghostModalTitle" class="ghost-modal__title">Welcome back, ' + safeName + '. We have a slight problem.</h2>' +
         '<p class="ghost-modal__body">' +
-          "The <b>night realm</b> welcomes you back. Watch your back, " +
-          "don't feed the bats 🦇 — everything else is yours to roam. " +
-          "Exit the chaos anytime." +
+          "Something's gotten into InternSphere tonight. We're not sure what — " +
+          "the lights are flickering, TARS keeps mumbling, and the dashboard feels… watched." +
+        '</p>' +
+        '<p class="ghost-modal__body">' +
+          "<b>Stay safe.</b> Don't linger too long in here. " +
+          "Your applications are saved (we checked that part, at least)." +
         '</p>' +
         '<div class="ghost-modal__actions">' +
-          '<button type="button" class="ghost-modal__skip">Skip</button>' +
-          '<a href="login.html" class="ghost-modal__cta">Sign up free →</a>' +
+          '<button type="button" class="ghost-modal__skip">Not now</button>' +
+          '<button type="button" class="ghost-modal__cta">Enter →</button>' +
         '</div>' +
         '<div class="ghost-modal__timer" aria-hidden="true">' +
           '<div class="ghost-modal__timer-fill"></div>' +
@@ -114,6 +226,7 @@ function installGreetingModal() {
 
     backdrop.querySelector(".ghost-modal__close")?.addEventListener("click", close);
     backdrop.querySelector(".ghost-modal__skip")?.addEventListener("click", close);
+    backdrop.querySelector(".ghost-modal__cta")?.addEventListener("click", close);
     backdrop.addEventListener("click", (e) => {
       if (e.target === backdrop) close();
     });
@@ -148,37 +261,56 @@ function shouldPlayIntro() {
 
 function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-// Spawn a handful of bats inside the intro scene that fly on random paths,
-// independently of the two candle-follow bats. Each bat is scoped to the
-// #ghostIntroBats layer so the phase-blackout fade cleans them up too.
+// Spawn a mix of image and video bats inside the intro scene that fly on
+// random paths, independently of the two candle-follow bats. Each bat is
+// scoped to the #ghostIntroBats layer so the phase-blackout fade cleans
+// them up too.
 function spawnIntroBats(overlay) {
   const layer = overlay.querySelector(".ghost-intro__bat-layer");
   if (!layer) return;
 
-  const variants = [GHOST_INTRO_ASSETS.bat, GHOST_INTRO_ASSETS.bats];
+  const imgVariants = [GHOST_INTRO_ASSETS.bat, GHOST_INTRO_ASSETS.bats];
   const paths = ["ltr", "rtl", "wave", "diag-down", "diag-up"];
-  const count = 4 + Math.floor(Math.random() * 2); // 4–5
+  const imgCount   = 5 + Math.floor(Math.random() * 3);    // 5–7 image bats
+  const videoCount = 4 + Math.floor(Math.random() * 3);    // 4–6 video bats
 
-  for (let i = 0; i < count; i++) {
+  function place(el, i, total) {
+    const top   = 8 + Math.random() * 55;
+    const size  = 70 + Math.random() * 65;     // 70–135px (was 40–85; bigger so they read clearly)
+    const dur   = 6 + Math.random() * 4;       // 6–10s
+    const delay = 0.4 + i * 0.55 + Math.random() * 0.6;
+    const bob   = 18 + Math.random() * 22;
+    el.style.top                = top + "%";
+    el.style.width              = size + "px";
+    el.style.animationDuration  = dur + "s";
+    el.style.animationDelay     = delay + "s";
+    el.style.setProperty("--ghost-bob", bob + "px");
+    el.addEventListener("animationend", (e) => {
+      if (e.target === el) el.remove();
+    });
+    layer.appendChild(el);
+  }
+
+  // Image bats — the legacy stock-art pair.
+  for (let i = 0; i < imgCount; i++) {
     const bat = document.createElement("img");
     bat.className = "ghost-intro__bat-rand ghost-intro__bat-rand--" + paths[Math.floor(Math.random() * paths.length)];
-    bat.src = variants[Math.floor(Math.random() * variants.length)];
+    bat.src = imgVariants[Math.floor(Math.random() * imgVariants.length)];
     bat.alt = "";
+    place(bat, i, imgCount);
+  }
 
-    const top = 8 + Math.random() * 55;        // upper half of scene, avoid ground
-    const size = 36 + Math.random() * 42;      // 36–78px
-    const dur = 6 + Math.random() * 4;         // 6–10s crossing
-    const delay = 0.4 + i * 0.7 + Math.random() * 0.6;
-    const bob = 18 + Math.random() * 22;
-
-    bat.style.top = top + "%";
-    bat.style.width = size + "px";
-    bat.style.animationDuration = dur + "s";
-    bat.style.animationDelay = delay + "s";
-    bat.style.setProperty("--ghost-bob", bob + "px");
-    bat.addEventListener("animationend", () => bat.remove());
-
-    layer.appendChild(bat);
+  // Video bats — alpha-channel webm so they fly on a transparent background.
+  for (let i = 0; i < videoCount; i++) {
+    const bat = document.createElement("video");
+    bat.className = "ghost-intro__bat-rand ghost-intro__bat-rand--" + paths[Math.floor(Math.random() * paths.length)];
+    bat.src = BAT_VIDEO_URLS[0];
+    bat.muted = true;
+    bat.playsInline = true;
+    bat.autoplay = true;
+    bat.loop = true;
+    bat.preload = "auto";
+    place(bat, imgCount + i, imgCount + videoCount);
   }
 }
 
@@ -205,10 +337,17 @@ function playGhostIntro() {
       '<div class="ghost-intro__hint" role="status" aria-live="polite">' +
         '<span class="ghost-intro__hint-dot" aria-hidden="true">⛶</span>' +
         '<span>For the best experience, switch to <b>fullscreen</b> (F11).</span>' +
-      '</div>' +
-      '<button type="button" class="ghost-intro__skip">Skip →</button>';
+      '</div>';
     document.body.appendChild(overlay);
     document.body.classList.add("ghost-intro-lock");
+
+    // Skip button lives OUTSIDE the overlay so the overlay's fade-in
+    // doesn't gate its visibility — it's clickable from frame zero.
+    const skipBtn = document.createElement("button");
+    skipBtn.type = "button";
+    skipBtn.className = "ghost-intro__skip";
+    skipBtn.textContent = "Skip →";
+    document.body.appendChild(skipBtn);
 
     const cap = overlay.querySelector("#ghostIntroCap");
     const candleEl = overlay.querySelector(".ghost-intro__candle");
@@ -217,18 +356,21 @@ function playGhostIntro() {
     let skipped = false;
     const finish = () => {
       overlay.classList.add("ghost-intro--closing");
+      skipBtn.classList.add("ghost-intro__skip--leaving");
+      // Wait long enough for the new 1.4s fade-out curve to fully play out.
       setTimeout(() => {
         overlay.remove();
+        skipBtn.remove();
         document.body.classList.remove("ghost-intro-lock");
         resolve();
-      }, 700);
+      }, 1500);
     };
     const skip = () => {
       if (skipped) return;
       skipped = true;
       finish();
     };
-    overlay.querySelector(".ghost-intro__skip").addEventListener("click", skip);
+    skipBtn.addEventListener("click", skip);
     document.addEventListener("keydown", function onKey(e) {
       if (e.key === "Escape") {
         document.removeEventListener("keydown", onKey);
@@ -237,14 +379,16 @@ function playGhostIntro() {
     });
 
     (async () => {
-      // Phase 0: overlay fades in — room dims, candle still hidden off-screen
+      // Phase 0: overlay fades in — room dims, candle still hidden off-screen.
+      // Hold longer so the fade-in fully resolves before the candle drift
+      // kicks off; nothing should pop in mid-fade.
       await wait(40);
       overlay.classList.add("is-visible");
       setCap("The lights begin to dim…");
 
       // Phase 1: candle floats in from the left and settles center-stage;
       // launch random-path bats in the scene alongside the candle entry.
-      await wait(600);
+      await wait(1300);   // was 600 — gives the 1.8s fade-in room to finish
       if (skipped) return;
       overlay.classList.add("phase-enter");
       setCap("A candle drifts in…");
@@ -261,9 +405,10 @@ function playGhostIntro() {
       await wait(120);
       if (skipped) return;
 
-      // Phase 3: skeleton pops in close to the candle
+      // Phase 3: skeleton fades in close to the candle. Longer hold so
+      // the smoother (1.4s) entry resolves before the swoosh starts.
       overlay.classList.add("phase-skeleton");
-      await wait(800);
+      await wait(1500);
       if (skipped) return;
 
       // Phase 4: skeleton leans in and blows — candle reacts
@@ -271,21 +416,16 @@ function playGhostIntro() {
       await wait(900);
       if (skipped) return;
 
-      // Phase 5a: candle blown out — hide the candle instantly but keep the
-      // skeleton and scene visible for a beat so the viewer registers the
-      // moment of extinction.
+      // Phase 5: candle out — hide it AND snap to pitch black on the same
+      // frame, no in-between beat. Hold the blackout briefly, then reveal
+      // the dashboard.
       if (candleEl) candleEl.style.display = "none";
-      await wait(260);
-      if (skipped) return;
-
-      // Phase 5b: instant hard cut to pitch black
       overlay.classList.add("phase-blackout");
-      await wait(420);
+      await wait(380);
       if (skipped) return;
 
-      // Phase 6: reveal the dashboard
       overlay.classList.add("phase-reveal");
-      await wait(600);
+      await wait(500);
       if (skipped) return;
       finish();
     })();
@@ -297,26 +437,207 @@ function playGhostIntro() {
 // a pulsing dark vignette and a witch cackle. First flyby ~20s after mount,
 // then every 45–55s. Gated to the student role — companies shouldn't get
 // haunted on a business dashboard.
-let witchAudio = null;
+let witchAudio       = null;
+let skeleCryAudio    = null;
+let guitaristAudio   = null;
+let halloweenAudioUnlocked = false;
+
 function prepareAudio() {
-  if (witchAudio) return;
-  try {
-    witchAudio = new Audio(WITCH_LAUGH_URL);
-    witchAudio.preload = "auto";
-    witchAudio.volume = 0.35;
-  } catch { witchAudio = null; }
+  // Witch cackle.
+  if (!witchAudio) {
+    try {
+      witchAudio = new Audio();
+      witchAudio.preload = "auto";
+      witchAudio.volume  = 1.0;
+      let triedFallback = false;
+      witchAudio.addEventListener("error", () => {
+        if (triedFallback) return;
+        triedFallback = true;
+        console.warn("[witch] local audio failed to load, falling back to CDN");
+        witchAudio.src = WITCH_LAUGH_FALLBACK;
+        witchAudio.load();
+      });
+      witchAudio.src = WITCH_LAUGH_LOCAL;
+    } catch { witchAudio = null; }
+  }
+
+  // Skeleton's panic-cry — looped during the chase.
+  if (!skeleCryAudio) {
+    try {
+      skeleCryAudio = new Audio();
+      skeleCryAudio.preload = "auto";
+      skeleCryAudio.volume  = 0.55;
+      skeleCryAudio.loop    = true;
+      skeleCryAudio.src     = SKELE_CRY_LOCAL;
+    } catch { skeleCryAudio = null; }
+  }
+
+  // Guitarist riff — looped while the band is on screen.
+  if (!guitaristAudio) {
+    try {
+      guitaristAudio = new Audio();
+      guitaristAudio.preload = "auto";
+      guitaristAudio.volume  = 0.5;
+      guitaristAudio.loop    = true;
+      guitaristAudio.src     = GUITARIST_LOCAL;
+    } catch { guitaristAudio = null; }
+  }
+
+  setupAudioUnlock();
 }
+
+// Unlock playback on the first user gesture so subsequent halloween
+// cackles / cries aren't blocked by autoplay policies. Browsers permit
+// muted media to autoplay freely — playing each element once while muted
+// "activates" it, after which unmuted plays succeed for the rest of the session.
+function setupAudioUnlock() {
+  if (halloweenAudioUnlocked) return;
+  const targets = [witchAudio, skeleCryAudio, guitaristAudio].filter(Boolean);
+  if (!targets.length) return;
+
+  const events = ["pointerdown", "keydown", "touchstart", "click"];
+  function unlock() {
+    if (halloweenAudioUnlocked) return;
+    let pending = targets.length;
+    let anySucceeded = false;
+    targets.forEach((audio) => {
+      const wasMuted = audio.muted;
+      audio.muted = true;
+      const p = audio.play();
+      const finish = (ok) => {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.muted = wasMuted;
+        if (ok) anySucceeded = true;
+        if (--pending === 0 && anySucceeded) {
+          halloweenAudioUnlocked = true;
+          events.forEach((ev) => document.removeEventListener(ev, unlock, true));
+        }
+      };
+      if (p && typeof p.then === "function") {
+        p.then(() => finish(true)).catch(() => finish(false));
+      } else {
+        finish(true);
+      }
+    });
+  }
+  events.forEach((ev) => document.addEventListener(ev, unlock, true));
+}
+
+let cackleEndedHandler = null;
 
 function playWitchLaugh() {
   if (!witchAudio) return;
   try {
+    // Cancel any in-progress double-play before starting a new one (e.g. if
+    // a flyby fires while the previous cackle is still on its second pass).
+    if (cackleEndedHandler) {
+      witchAudio.removeEventListener("ended", cackleEndedHandler);
+      cackleEndedHandler = null;
+    }
+
+    let plays = 0;
+    cackleEndedHandler = function onEnded() {
+      plays += 1;
+      if (plays >= 2) {
+        witchAudio.removeEventListener("ended", cackleEndedHandler);
+        cackleEndedHandler = null;
+        return;
+      }
+      witchAudio.currentTime = 0;
+      const p2 = witchAudio.play();
+      if (p2 && typeof p2.catch === "function") p2.catch(() => {});
+    };
+    witchAudio.addEventListener("ended", cackleEndedHandler);
+
     witchAudio.currentTime = 0;
     const p = witchAudio.play();
-    if (p && typeof p.catch === "function") p.catch(() => {});
-  } catch {}
+    if (p && typeof p.catch === "function") {
+      p.catch((err) => {
+        if (cackleEndedHandler) {
+          witchAudio.removeEventListener("ended", cackleEndedHandler);
+          cackleEndedHandler = null;
+        }
+        console.warn("[witch] cackle blocked — interact with the page once to unlock audio:", err?.name || err);
+      });
+    }
+  } catch (err) {
+    console.warn("[witch] cackle threw:", err);
+  }
 }
 
-function triggerHorrorOverlay(durationMs) {
+// ─── Vignette intensity (refcounted) ───
+// Each spawn calls pushScene() at start and popScene() after its duration.
+// Guitarist riff — fires the instant the band spawns and snaps off the
+// moment they leave. No leading or trailing silence.
+function startGuitaristRiff() {
+  if (!guitaristAudio) return;
+  try {
+    guitaristAudio.currentTime = 0;
+    const p = guitaristAudio.play();
+    if (p && typeof p.catch === "function") {
+      p.catch((err) => {
+        console.warn("[guitarist] riff blocked — interact with the page once to unlock audio:", err?.name || err);
+      });
+    }
+  } catch (err) {
+    console.warn("[guitarist] riff threw:", err);
+  }
+}
+
+function stopGuitaristRiff() {
+  if (!guitaristAudio) return;
+  try { guitaristAudio.pause(); guitaristAudio.currentTime = 0; } catch {}
+}
+
+// Skele cry control — looped through the chase, with leading and trailing
+// silence so the audio doesn't fire the moment he enters frame and lingers
+// briefly after the chase ends for emotional effect.
+let skeleCryStartTimer = null;
+let skeleCryStopTimer  = null;
+
+function startSkeleCryForChase(chaseDurMs) {
+  if (!skeleCryAudio) return;
+  // Cancel any previous chase still queued (shouldn't normally happen).
+  if (skeleCryStartTimer) { clearTimeout(skeleCryStartTimer); skeleCryStartTimer = null; }
+  if (skeleCryStopTimer)  { clearTimeout(skeleCryStopTimer);  skeleCryStopTimer  = null; }
+  try { skeleCryAudio.pause(); skeleCryAudio.currentTime = 0; } catch {}
+
+  const START_DELAY_MS = 1200;   // wait until he's clearly running before he cries
+  const TRAIL_MS       = 1000;   // keep crying 1s after the chase visuals end
+
+  skeleCryStartTimer = setTimeout(() => {
+    skeleCryStartTimer = null;
+    if (!skeleCryAudio) return;
+    try {
+      skeleCryAudio.currentTime = 0;
+      const p = skeleCryAudio.play();
+      if (p && typeof p.catch === "function") {
+        p.catch((err) => {
+          console.warn("[skele] cry blocked — interact with the page once to unlock audio:", err?.name || err);
+        });
+      }
+    } catch (err) {
+      console.warn("[skele] cry threw:", err);
+    }
+  }, START_DELAY_MS);
+
+  skeleCryStopTimer = setTimeout(() => {
+    skeleCryStopTimer = null;
+    if (!skeleCryAudio) return;
+    try {
+      skeleCryAudio.pause();
+      skeleCryAudio.currentTime = 0;
+    } catch {}
+  }, chaseDurMs + TRAIL_MS);
+}
+
+// The vignette opacity scales with how many scenes overlap, so a lone
+// flyby gets a subtle shift while multiple overlapping events darken
+// the screen more noticeably.
+let activeScenes = 0;
+
+function ensureOverlay() {
   let overlay = document.getElementById("ghostHorrorOverlay");
   if (!overlay) {
     overlay = document.createElement("div");
@@ -324,9 +645,35 @@ function triggerHorrorOverlay(durationMs) {
     overlay.className = "ghost-horror-overlay";
     document.body.appendChild(overlay);
   }
-  overlay.classList.add("is-active");
-  setTimeout(() => overlay.classList.remove("is-active"), durationMs);
+  return overlay;
 }
+
+function updateVignetteIntensity() {
+  const overlay = ensureOverlay();
+  if (activeScenes <= 0) {
+    overlay.classList.remove("is-active");
+    overlay.style.removeProperty("--horror-strength");
+    return;
+  }
+  // 1 scene  → 0.45 (subtle, noticeable)
+  // 2 scenes → 0.70
+  // 3+ scenes → 1.00 (full intensity)
+  const strength = Math.min(1, 0.45 + (activeScenes - 1) * 0.25);
+  overlay.style.setProperty("--horror-strength", strength.toFixed(2));
+  overlay.classList.add("is-active");
+}
+
+function pushScene(durationMs) {
+  activeScenes += 1;
+  updateVignetteIntensity();
+  setTimeout(() => {
+    activeScenes = Math.max(0, activeScenes - 1);
+    updateVignetteIntensity();
+  }, Math.max(800, durationMs));
+}
+
+// Back-compat shim — older code paths called this with a single duration.
+function triggerHorrorOverlay(durationMs) { pushScene(durationMs); }
 
 const PATH_CLASSES = [
   "ghost-fly--ltr",
@@ -366,42 +713,773 @@ function spawnCreature({ variants, baseClass, sizeRange, durationRange, bobRange
   return dur + delay;
 }
 
-function spawnGhostFlyby() {
+// Spawn a single witch on the squadron flight path. Caller controls size,
+// vertical position, spawn delay, and which video she rides. The wrapper
+// carries the animation; the trail glow comes from `.witch-fly`'s ::before
+// and ::after pseudos and rides along automatically.
+// Spawn a single golden spark at the witch's current screen position.
+// The spark falls straight to the bottom of the viewport and stays at
+// full opacity — body's overflow:hidden visually "swallows" it at the
+// bottom edge.
+function spawnGoldenSpark(wrap, onLanding) {
+  if (!wrap.isConnected) return;
+  const rect = wrap.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
+
+  const spark = document.createElement("div");
+  spark.className = "witch-spark";
+
+  // Origin: somewhere in the lower half of the witch's bounding box —
+  // emulates sparks dropping from her broom.
+  const xOffset = (Math.random() - 0.5) * rect.width * 0.7;
+  const startX  = rect.left + rect.width / 2 + xOffset;
+  const startY  = rect.top  + rect.height * (0.55 + Math.random() * 0.3);
+
+  // Distance to bottom of viewport plus a margin so it disappears below.
+  const fallY  = (window.innerHeight - startY) + 40;
+  const driftX = (Math.random() - 0.5) * 50;
+  const size   = 5 + Math.random() * 7;
+  const dur    = 1.4 + Math.random() * 0.9;
+
+  spark.style.left = startX + "px";
+  spark.style.top  = startY + "px";
+  spark.style.setProperty("--spark-size",  size + "px");
+  spark.style.setProperty("--spark-dur",   dur + "s");
+  spark.style.setProperty("--spark-fall",  fallY + "px");
+  spark.style.setProperty("--spark-drift", driftX + "px");
+
+  spark.addEventListener("animationend", () => {
+    spark.remove();
+    if (onLanding) onLanding(startX + driftX);
+  });
+  document.body.appendChild(spark);
+}
+
+// Wrapper-relative spark trail: starts at 70% of the witch's animation,
+// runs to 100%, spawns a spark every ~70ms during the sweep. One spark
+// in the middle of the sweep is "loaded" — when it hits the ground, it
+// triggers a bat burst from its impact point (handled by the onLanding
+// callback on spawnGoldenSpark).
+function startWitchSparkTrail(wrap, durationSec, delaySec) {
+  const sweepStartMs = (delaySec + durationSec * 0.7) * 1000;
+  const sweepLengthMs = (durationSec * 0.30) * 1000;
+
+  setTimeout(() => {
+    if (!wrap.isConnected) return;
+    const interval = setInterval(() => {
+      if (!wrap.isConnected) {
+        clearInterval(interval);
+        return;
+      }
+      spawnGoldenSpark(wrap);
+    }, 70);
+    setTimeout(() => clearInterval(interval), sweepLengthMs);
+  }, sweepStartMs);
+
+  // Loaded spark — drops mid-sweep and triggers a bat burst on landing.
+  setTimeout(() => {
+    if (!wrap.isConnected) return;
+    spawnGoldenSpark(wrap, (landingX) => spawnBatBurstFromPoint(landingX));
+  }, sweepStartMs + sweepLengthMs * 0.4);
+}
+
+function spawnSingleWitch({ src, top, size, duration, delay, bob, leader, swingCw, pathClass, witchX, enableSparkTrail }) {
+  const wrap = document.createElement("div");
+  wrap.className = "witch-fly"
+    + (leader ? " witch-fly--leader" : "")
+    + (swingCw ? " witch-fly--swing-cw" : "")
+    + (pathClass ? " " + pathClass : "");
+  wrap.setAttribute("aria-hidden", "true");
+  wrap.style.top               = top + "%";
+  wrap.style.width             = size + "px";
+  wrap.style.height            = Math.round(size * 0.62) + "px";
+  wrap.style.animationDuration = duration + "s";
+  wrap.style.animationDelay    = (delay || 0) + "s";
+  wrap.style.setProperty("--ghost-bob", bob + "px");
+  if (typeof witchX === "number") wrap.style.setProperty("--witch-x", witchX + "vw");
+
+  // Spark trail kicks in during her sweep-out phase (70%→100% of the
+  // animation), only on the looping paths where the post-swing acceleration
+  // exists. Disabled for zigzag/straight/vertical.
+  if (enableSparkTrail) {
+    startWitchSparkTrail(wrap, duration, delay || 0);
+  }
+
+  const sprite = document.createElement("video");
+  sprite.className = "witch-fly__sprite";
+  sprite.src = src;
+  sprite.muted = true;          // required for autoplay alongside our separate cackle audio
+  sprite.playsInline = true;
+  sprite.autoplay = true;
+  sprite.loop = true;
+  sprite.preload = "auto";
+
+  // If the video can't load, swap to an icon — and if that also fails,
+  // fall back to the inline SVG so the witch always shows up.
+  sprite.addEventListener("error", () => {
+    const img = document.createElement("img");
+    img.className = "witch-fly__sprite";
+    img.src = pick(WITCH_VARIANTS);
+    img.addEventListener("error", function onImgErr() {
+      img.removeEventListener("error", onImgErr);
+      img.src = WITCH_ICON_FALLBACK;
+    });
+    if (sprite.parentNode) sprite.replaceWith(img);
+  });
+
+  wrap.appendChild(sprite);
+  wrap.addEventListener("animationend", (e) => {
+    if (e.target === wrap) wrap.remove();
+  });
+  document.body.appendChild(wrap);
+}
+
+// Spawn the witch squadron: leader at the front, two followers staggered
+// behind her. All ride the same flight path (slow entry → 360° swing →
+// fast sweep out), separated by short delays so they form a procession.
+// Pick a flight path. The squadron all rides the same one per flyby.
+function pickWitchPath() {
+  const r = Math.random();
+  if (r < 0.40) return "loop";       // 40% — full circle loop
+  if (r < 0.65) return "zigzag";     // 25% — heavy weave
+  if (r < 0.85) return "straight";   // 20% — calm sweep
+  if (r < 0.93) return "up";         //  8% — bottom to top
+  return "down";                     //  7% — top to bottom
+}
+
+function spawnWitch() {
+  const path    = pickWitchPath();
+  const dur     = 14 + Math.random() * 4;       // 14–18s
+  const swingCw = Math.random() < 0.5;          // only used by the loop paths
+
+  // Vertical paths use a CSS variable for horizontal column offsets
+  // (followers sit to the left/right of the leader). Horizontal paths
+  // use the existing `top` offset for above/below leader formation.
+  const isVertical = path === "up" || path === "down";
+  // Spark trail only fires on the loop paths because their keyframes are
+  // the only ones with a sweep-out phase after the spin.
+  const enableSparkTrail = path === "loop";
+
+  let pathClass = null;
+  if (path === "zigzag")        pathClass = "witch-fly--path-zigzag";
+  else if (path === "straight") pathClass = "witch-fly--path-straight";
+  else if (path === "up")       pathClass = "witch-fly--path-up";
+  else if (path === "down")     pathClass = "witch-fly--path-down";
+  // path === "loop" leaves pathClass null; default keyframes handle it,
+  // optionally with the swing-cw modifier flipping direction.
+
+  const baseTop = isVertical
+    ? 0                                          // vertical paths anchor at viewport top; keyframes handle Y
+    : 38 + Math.random() * 12;                   // 38–50% middle band
+
+  // Leader — anchor of the squadron.
+  spawnSingleWitch({
+    src: WITCH_LEADER_URL,
+    top: baseTop,
+    size: 170 + Math.random() * 30,
+    duration: dur,
+    delay: 0,
+    bob: 30 + Math.random() * 12,
+    leader: true,
+    swingCw: !isVertical && swingCw,
+    pathClass,
+    witchX: isVertical ? 0 : undefined,
+    enableSparkTrail,
+  });
+
+  // Follower 1 — well behind. For horizontal paths, clearly above the
+  // leader's line. For vertical paths, well to the LEFT column.
+  spawnSingleWitch({
+    src: WITCH_FOLLOWER_URLS[0],
+    top: isVertical ? baseTop : Math.max(2, baseTop - 5 - Math.random() * 2),    // ~5–7% above (was 2–3.5)
+    size: 130 + Math.random() * 25,
+    duration: dur,
+    delay: 0.9 + Math.random() * 0.5,                                            // ~0.9–1.4s (was 0.55–0.9)
+    bob: 26 + Math.random() * 12,
+    leader: false,
+    swingCw: !isVertical && swingCw,
+    pathClass,
+    witchX: isVertical ? -7 - Math.random() * 2 : undefined,                     // ~-7 to -9vw (was -4 to -5.5)
+    enableSparkTrail,
+  });
+
+  // Follower 2 — even further behind. Below leader (horizontal) or to
+  // the RIGHT column (vertical).
+  spawnSingleWitch({
+    src: WITCH_FOLLOWER_URLS[1],
+    top: isVertical ? baseTop : Math.min(46, baseTop + 5 + Math.random() * 2),   // ~5–7% below
+    size: 130 + Math.random() * 25,
+    duration: dur,
+    delay: 1.7 + Math.random() * 0.5,                                            // ~1.7–2.2s (was 1.05–1.4)
+    bob: 26 + Math.random() * 12,
+    leader: false,
+    swingCw: !isVertical && swingCw,
+    pathClass,
+    witchX: isVertical ? 7 + Math.random() * 2 : undefined,                      // ~+7 to +9vw
+    enableSparkTrail,
+  });
+
+  // Cackle synced with the leader's entry.
+  setTimeout(playWitchLaugh, 280);
+
+  // Always spawn ~4 bats around the witches — they share the same vertical
+  // band (or upper half for vertical paths) so the squadron feels surrounded.
+  spawnBatsAroundWitches(baseTop, isVertical);
+
+  // Squadron is fully gone when the last follower finishes.
+  return dur + 1.4;
+}
+
+// ─── Animated bat (video variant) ───
+// Reuses the ghost-fly path keyframes so bats can fly anywhere on screen.
+// Picks a random video clip from the pool per spawn so the flock looks varied.
+function spawnVideoBat({ pathClass, delay }) {
+  const wrap = document.createElement("div");
+  wrap.className = "ghost-fly bat-fly bat-video " + pathClass;
+  wrap.setAttribute("aria-hidden", "true");
+
+  const top  = 6 + Math.random() * 74;
+  const size = 122 + Math.random() * 88;      // 122–210px (+35% over previous 90–155 range)
+  const dur  = 7 + Math.random() * 5;         // 7–12s
+  const bob  = 22 + Math.random() * 22;
+
+  wrap.style.top               = top + "%";
+  wrap.style.width             = size + "px";
+  wrap.style.animationDuration = dur + "s";
+  wrap.style.animationDelay    = delay + "s";
+  wrap.style.setProperty("--ghost-bob", bob + "px");
+
+  const v = document.createElement("video");
+  v.className = "halloween-video-sprite";
+  v.src = pick(BAT_VIDEO_URLS);
+  v.muted = true;
+  v.playsInline = true;
+  v.autoplay = true;
+  v.loop = true;
+  v.preload = "auto";
+  wrap.appendChild(v);
+
+  wrap.addEventListener("animationend", (e) => {
+    if (e.target === wrap) wrap.remove();
+  });
+  document.body.appendChild(wrap);
+  return dur + delay;
+}
+
+// Spawn a flock of N bats with random paths, sizes, and entry delays so
+// they look like they're scattering across the viewport rather than
+// marching in formation.
+function spawnBatFlock(count) {
+  const n = count || (5 + Math.floor(Math.random() * 4));   // 5–8 bats by default (-35% from prior 8–12)
+  for (let i = 0; i < n; i++) {
+    spawnVideoBat({
+      pathClass: pick(PATH_CLASSES),
+      delay: i * 0.2 + Math.random() * 0.7,
+    });
+  }
+}
+
+// Bats positioned in a tight band around the witch squadron, so they look
+// like they're flying with/around the witches rather than scattered across
+// the whole viewport.
+function spawnBatsAroundWitches(baseTop, isVertical) {
+  const count = 3;   // -35% from prior 4
+  for (let i = 0; i < count; i++) {
+    const wrap = document.createElement("div");
+    wrap.className = "ghost-fly bat-fly bat-video " + pick(PATH_CLASSES);
+    wrap.setAttribute("aria-hidden", "true");
+
+    // For horizontal paths, hug the leader's vertical band ±10% so the
+    // bats orbit the squadron instead of scattering. For vertical paths,
+    // pick anywhere in the upper-half since the witches traverse all of it.
+    const top = isVertical
+      ? 8 + Math.random() * 60
+      : Math.max(4, Math.min(82, baseTop + (Math.random() * 20 - 10)));
+    const size = 100 + Math.random() * 60;     // 100–160px (slightly tighter than the wider flock)
+    const dur  = 8 + Math.random() * 4;        // 8–12s
+    const bob  = 22 + Math.random() * 22;
+    const delay = i * 0.35 + Math.random() * 0.4;
+
+    wrap.style.top               = top + "%";
+    wrap.style.width             = size + "px";
+    wrap.style.animationDuration = dur + "s";
+    wrap.style.animationDelay    = delay + "s";
+    wrap.style.setProperty("--ghost-bob", bob + "px");
+
+    const v = document.createElement("video");
+    v.className = "halloween-video-sprite";
+    v.src = pick(BAT_VIDEO_URLS);
+    v.muted = true;
+    v.playsInline = true;
+    v.autoplay = true;
+    v.loop = true;
+    v.preload = "auto";
+    wrap.appendChild(v);
+
+    wrap.addEventListener("animationend", (e) => {
+      if (e.target === wrap) wrap.remove();
+    });
+    document.body.appendChild(wrap);
+  }
+}
+
+// ─── Bat burst from a ground point ───
+// Fired when one of the witch's golden sparks hits the ground. Bats erupt
+// upward and outward in a fan from the impact point, each on its own path,
+// then fade as they travel off-screen. Visual narrative: spark = summon.
+function spawnBatBurstFromPoint(landingX) {
+  if (document.hidden || !isHalloweenEnabled()) return;
+  const count = 6 + Math.floor(Math.random() * 5);   // 6–10 bats
+  for (let i = 0; i < count; i++) {
+    const wrap = document.createElement("div");
+    wrap.className = "bat-burst";
+    wrap.setAttribute("aria-hidden", "true");
+
+    // Fan upward and outward. End offsets are relative to the landing
+    // point (which we anchor with left + bottom 0).
+    const endX = (Math.random() - 0.5) * 1600;             // -800 to +800px lateral
+    const endY = -(420 + Math.random() * 680);             // -420 to -1100px upward
+    const dur  = 4 + Math.random() * 3;                    // 4–7s
+    const size = 60 + Math.random() * 50;                  // 60–110px
+    const spin = (Math.random() - 0.5) * 30;
+    const delay = i * 0.04 + Math.random() * 0.10;
+
+    wrap.style.left   = landingX + "px";
+    wrap.style.bottom = "0";
+    wrap.style.width  = size + "px";
+    wrap.style.height = size + "px";
+    wrap.style.setProperty("--bat-end-x", endX + "px");
+    wrap.style.setProperty("--bat-end-y", endY + "px");
+    wrap.style.setProperty("--bat-spin",  spin + "deg");
+    wrap.style.animationDuration = dur + "s";
+    wrap.style.animationDelay    = delay + "s";
+
+    const v = document.createElement("video");
+    v.className = "halloween-video-sprite";
+    v.src = pick(BAT_VIDEO_URLS);
+    v.muted = true;
+    v.playsInline = true;
+    v.autoplay = true;
+    v.loop = true;
+    v.preload = "auto";
+    wrap.appendChild(v);
+
+    wrap.addEventListener("animationend", (e) => {
+      if (e.target === wrap) wrap.remove();
+    });
+    document.body.appendChild(wrap);
+  }
+  pushScene(7000);
+}
+
+// Light "stray bat" loop — keeps a faint sense of motion between witch
+// flybys without competing with the burst moment as the bats' main beat.
+function scheduleBatFlock() {
+  function next() {
+    const delay = (3 * 60 * 1000) + Math.random() * (60 * 1000);   // 3–4 min
+    setTimeout(() => {
+      if (!document.hidden && isHalloweenEnabled()) {
+        spawnBatFlock(1 + Math.floor(Math.random() * 2));   // 1–2 stray bats
+        pushScene(5000);
+      }
+      next();
+    }, delay);
+  }
+  // First flock ~25s after mount.
+  setTimeout(() => {
+    if (!document.hidden && isHalloweenEnabled()) {
+      spawnBatFlock(1 + Math.floor(Math.random() * 2));
+      pushScene(5000);
+    }
+    next();
+  }, 60000 + Math.random() * 30000);   // first stray bat 60–90s after mount
+}
+
+// ─── Running skeleton chased by a zombie ───
+// Both videos sprint across the lower portion of the viewport in the same
+// direction. The zombie spawns slightly later so he reads as "behind". They
+// use bottom-based positioning so feet stay at ground level no matter how
+// large the sprite is, and each carries a speech bubble for character.
+function spawnSkeletonChase() {
+  const direction  = Math.random() < 0.5 ? "chase--ltr" : "chase--rtl";
+  // Fixed baseline so skeleton, zombie, and the grave obstacle all sit on
+  // the same straight line. Grave's wrap uses bottom:0; we match it here.
+  const baseBottom = 0;
+  const dur        = 9 + Math.random() * 4;   // 9–13s
+
+  // 1 in 3 chases includes a grave obstacle the skeleton has to vault.
+  // Skeleton uses jumping keyframes; zombie keeps lumbering through.
+  const hasGraveObstacle = Math.random() < 0.33;
+
+  // Spawn-gap floor bumped up so the zombie never overlaps the skeleton,
+  // while still keeping him close enough to read as actively chasing.
+  //   ~30% close   (0.35–0.55s)
+  //   ~40% medium  (0.55–0.80s)
+  //   ~30% long    (0.80–1.10s)
+  let zombieSpawnGap;
+  const r = Math.random();
+  if      (r < 0.30) zombieSpawnGap = 0.35 + Math.random() * 0.20;
+  else if (r < 0.70) zombieSpawnGap = 0.55 + Math.random() * 0.25;
+  else               zombieSpawnGap = 0.80 + Math.random() * 0.30;
+
+  function entity(src, className, opts) {
+    const wrap = document.createElement("div");
+    wrap.className = "chase-fly " + className + " " + direction
+      + (opts.extraClass ? " " + opts.extraClass : "");
+    wrap.setAttribute("aria-hidden", "true");
+    wrap.style.bottom            = opts.bottom + "%";
+    wrap.style.width             = opts.size + "px";
+    wrap.style.animationDuration = opts.duration + "s";
+    wrap.style.animationDelay    = opts.delay + "s";
+
+    if (opts.bubbleText) {
+      const bubble = document.createElement("span");
+      bubble.className = "chase-bubble chase-bubble--" + opts.bubbleVariant;
+      bubble.textContent = opts.bubbleText;
+      // Delay the bubble so it doesn't fire the moment the sprite enters frame
+      // — characters run silently for a beat, then vocalize.
+      bubble.style.animationDelay = (opts.bubbleDelay || 0) + "s";
+      wrap.appendChild(bubble);
+    }
+
+    const v = document.createElement("video");
+    v.className = "halloween-video-sprite";
+    v.src = src;
+    v.muted = true;
+    v.playsInline = true;
+    v.autoplay = true;
+    v.loop = true;
+    v.preload = "auto";
+    wrap.appendChild(v);
+
+    wrap.addEventListener("animationend", (e) => {
+      if (e.target === wrap) wrap.remove();
+    });
+    document.body.appendChild(wrap);
+  }
+
+  // Skeleton cries out 2–3s into the chase, after he's clearly running.
+  const skeletonBubbleAt = 2 + Math.random();
+  // Zombie growls back 2–3s after the skeleton's bubble appears — long
+  // enough that the skeleton's text has mostly faded by the time the
+  // zombie's pops in, so they read as call-and-response. Both bubbles'
+  // animation-delays are relative to when their elements enter the DOM
+  // (the same instant), so this is a direct offset.
+  const zombieBubbleAt = skeletonBubbleAt + 2 + Math.random();
+
+  // Skeleton (lead, panicking). Use jumping keyframes when there's a grave
+  // to vault — class targets `.chase-skeleton.chase--with-obstacle.chase--ltr`.
+  entity(RUNNING_SKELETON_URL, "chase-skeleton", {
+    bottom: baseBottom,
+    size: 220 + Math.random() * 50,           // 220–270px
+    delay: 0,
+    duration: dur,
+    bubbleText: pick(SKELETON_BUBBLES),
+    bubbleVariant: "skeleton",
+    bubbleDelay: skeletonBubbleAt,
+    extraClass: hasGraveObstacle ? "chase--with-obstacle" : null,
+  });
+  // Zombie (slightly behind and slightly larger for menace). Doesn't jump
+  // — he just plows through the grave even when one is present. Same
+  // baseBottom as the skeleton so the two stay on a single straight line.
+  entity(ZOMBIE_URL, "chase-zombie", {
+    bottom: baseBottom,
+    size: 240 + Math.random() * 50,           // 240–290px
+    delay: zombieSpawnGap,
+    duration: dur + 0.3,
+    bubbleText: pick(ZOMBIE_BUBBLES),
+    bubbleVariant: "zombie",
+    bubbleDelay: zombieBubbleAt,
+  });
+
+  // Grave obstacle: lock the spawn to the skeleton's jump moment in
+  // wallclock, not to a percentage of dur. The grave webm has a fixed
+  // internal rise animation (~GRAVE_RISE_LEAD_MS), so the gravestone
+  // needs to start that many ms before the skeleton arrives at peak
+  // (56% of dur, where the jump apex sits). Direction matters: LTR
+  // skeleton peaks at 59vw, RTL skeleton peaks at 41vw, so the grave
+  // is placed accordingly to stay under the apex.
+  if (hasGraveObstacle) {
+    const GRAVE_RISE_LEAD_MS = 2500;
+    const jumpPeakMs   = dur * 0.56 * 1000;
+    const graveSpawnMs = Math.max(0, jumpPeakMs - GRAVE_RISE_LEAD_MS);
+    setTimeout(() => {
+      if (!document.hidden && isHalloweenEnabled()) {
+        spawnGraveObstacle(direction);
+      }
+    }, graveSpawnMs);
+  }
+
+  // Skeleton's panic-cry plays in a loop while he's running. It starts
+  // after a brief delay so it kicks in once he's clearly in motion, and
+  // hangs on for ~1s after the chase visuals end.
+  const totalChaseMs = (dur + 0.75) * 1000;
+  startSkeleCryForChase(totalChaseMs);
+
+  return dur + 0.75;
+}
+
+// ─── Skeleton band: guitar player + dancer side by side ───
+// Pops up in a random bottom corner. Guitarist is the anchor; the dancer
+// stands right next to him, vibing along. They share an entry/exit fade.
+function spawnSkeletonBand() {
   if (document.hidden) return;
+  if (!isHalloweenEnabled()) return;
 
-  const ghostCount = 3 + Math.floor(Math.random() * 3); // 3–5 ghosts
-  const batCount   = 2 + Math.floor(Math.random() * 3); // 2–4 bats
-  let maxEnd = 0;
+  // Random horizontal anchor: pick a side AND a random offset so the band
+  // doesn't always show up at the same corner.
+  const isRight = Math.random() < 0.5;
+  const offsetPct = 4 + Math.random() * 60;     // 4–64% from the chosen edge
 
-  for (let i = 0; i < ghostCount; i++) {
-    const end = spawnCreature({
-      variants: GHOST_VARIANTS,
-      baseClass: "ghost-fly",
-      sizeRange: [34, 62],
-      durationRange: [10, 15],
-      bobRange: [14, 30],
-      pathClass: pick(PATH_CLASSES),
-      delay: i * 0.4 + Math.random() * 0.6,
-    });
-    if (end > maxEnd) maxEnd = end;
+  const wrap = document.createElement("div");
+  wrap.className = "skeleton-band " + (isRight ? "skeleton-band--right" : "skeleton-band--left");
+  wrap.setAttribute("aria-hidden", "true");
+  if (isRight) wrap.style.right = offsetPct + "%";
+  else         wrap.style.left  = offsetPct + "%";
+
+  function makeVideo(src, extraClass) {
+    const v = document.createElement("video");
+    v.className = "skeleton-band__member " + extraClass;
+    v.src = src;
+    v.muted = true;
+    v.playsInline = true;
+    v.autoplay = true;
+    v.loop = true;
+    v.preload = "auto";
+    return v;
   }
 
-  for (let i = 0; i < batCount; i++) {
-    const end = spawnCreature({
-      variants: BAT_VARIANTS,
-      baseClass: "ghost-fly bat-fly",
-      sizeRange: [24, 40],
-      durationRange: [7, 11],           // bats are quicker
-      bobRange: [20, 40],
-      pathClass: pick(PATH_CLASSES),
-      delay: 0.6 + i * 0.3 + Math.random() * 0.5,
-    });
-    if (end > maxEnd) maxEnd = end;
+  const guitar  = makeVideo(GUITAR_SKELETON_URL,  "skeleton-band__guitar");
+  const dancer  = makeVideo(DANCING_SKELETON_URL, "skeleton-band__dancer");
+
+  // Order in the DOM = visual left-to-right. We always want the dancer on
+  // the OUTER side and the guitarist on the INNER side, so the pair faces
+  // toward the centre of the screen rather than off-screen. The dancer's
+  // source clip naturally faces one direction; we flip her when she's on
+  // the LEFT of the guitarist so she keeps facing him either way.
+  if (isRight) {
+    // Band at bottom-right: dancer on LEFT of guitarist → flip to face right.
+    dancer.classList.add("skeleton-band__dancer--flip");
+    wrap.appendChild(dancer);
+    wrap.appendChild(guitar);
+  } else {
+    // Band at bottom-left: dancer on RIGHT of guitarist → natural facing.
+    wrap.appendChild(guitar);
+    wrap.appendChild(dancer);
   }
 
-  // Horror vignette lasts roughly as long as the longest creature is on-screen.
-  triggerHorrorOverlay(Math.ceil(maxEnd * 1000) + 400);
-  playWitchLaugh();
+  document.body.appendChild(wrap);
+
+  // Start the riff the instant the band appears — no delay.
+  startGuitaristRiff();
+
+  const visibleMs = 6000 + Math.random() * 3000;    // 6–9s on screen (50% of previous)
+  setTimeout(() => {
+    wrap.classList.add("is-leaving");
+    // Riff cuts the moment they start exiting, before the fade animation finishes.
+    stopGuitaristRiff();
+    setTimeout(() => wrap.remove(), 1200);
+  }, visibleMs);
+}
+
+// ─── Egypt mummy (lumbering walk across the bottom) ───
+// Reuses the chase keyframes for a slow horizontal sprint. Lower z-index
+// than the chase so if they ever co-occur he reads as background.
+function spawnEgyptMummy() {
+  if (document.hidden || !isHalloweenEnabled()) return;
+
+  const direction = Math.random() < 0.5 ? "chase--ltr" : "chase--rtl";
+  const wrap = document.createElement("div");
+  wrap.className = "chase-fly chase-mummy " + direction;
+  wrap.setAttribute("aria-hidden", "true");
+  wrap.style.bottom            = "0";                              // grounded — feet at viewport bottom
+  wrap.style.width             = (220 + Math.random() * 60) + "px"; // 220–280px
+  wrap.style.animationDuration = (16 + Math.random() * 4) + "s";   // 16–20s lumbering walk
+
+  const v = document.createElement("video");
+  v.className = "halloween-video-sprite";
+  v.src = EGYPT_MUMMY_URL;
+  v.muted = true;
+  v.playsInline = true;
+  v.autoplay = true;
+  v.loop = true;
+  v.preload = "auto";
+  wrap.appendChild(v);
+
+  wrap.addEventListener("animationend", (e) => {
+    if (e.target === wrap) wrap.remove();
+  });
+  document.body.appendChild(wrap);
+}
+
+// ─── Grave obstacle (single-play, mid-chase) ───
+// Spawned only as part of the skeleton chase scenario (1 in 3 chases).
+// Position depends on chase direction so it lands directly under the
+// skeleton's jump apex. Its video plays through ONCE — when it ends, the
+// element fades and is removed. No looping.
+function spawnGraveObstacle(direction) {
+  if (document.hidden || !isHalloweenEnabled()) return;
+
+  const wrap = document.createElement("div");
+  wrap.className = "grave-cameo grave-cameo--obstacle";
+  wrap.setAttribute("aria-hidden", "true");
+  // Skeleton's jump apex sits at 56% of his chase animation: that maps
+  // to 59vw on LTR runs and 41vw on RTL runs. The grave is 180px wide,
+  // so subtract 90px from the apex x to centre it under him.
+  const apexVw = direction === "chase--rtl" ? 41 : 59;
+  wrap.style.bottom = "0";
+  wrap.style.left   = "calc(" + apexVw + "vw - 90px)";
+
+  const v = document.createElement("video");
+  v.className = "halloween-video-sprite";
+  v.src = GRAVE_URL;
+  v.muted = true;
+  v.playsInline = true;
+  v.autoplay = true;
+  v.loop = false;            // play once and stop
+  v.preload = "auto";
+  v.addEventListener("ended", () => {
+    if (!wrap.isConnected) return;
+    wrap.classList.add("is-leaving");
+    setTimeout(() => wrap.remove(), 700);
+  });
+  wrap.appendChild(v);
+
+  document.body.appendChild(wrap);
+}
+
+// Dev-only toggle. Reads/writes localStorage so the choice persists across
+// reloads. When "off" the flyby scheduler keeps ticking but bails out, and
+// the vignette + button switch into a faded normal-mode look.
+const HALLOWEEN_FLAG_KEY = "halloweenDevMode";
+function isHalloweenEnabled() {
+  try {
+    const v = localStorage.getItem(HALLOWEEN_FLAG_KEY);
+    // Default to ON (this whole module only loads for dev accounts already).
+    return v === null ? true : v === "on";
+  } catch { return true; }
+}
+
+// ─── Scene rotator ───
+// Single coordinator that decides which featured animation fires next.
+// Each cast member has its own cooldown range; the rotator picks among
+// the eligible (cooled-down) members weighted by time-since-last-fire,
+// with a hard rule: never fire the same one twice in a row. Bats stay
+// on their own ambient loop and are NOT part of this rotation.
+const SCENE_CAST = [
+  {
+    id: "chase",
+    cooldownMin: 5 * 60 * 1000,
+    cooldownMax: 7 * 60 * 1000,
+    fire() {
+      const dur = spawnSkeletonChase();
+      pushScene(Math.min(13000, Math.ceil(dur * 1000)));
+    },
+  },
+  {
+    id: "witch",
+    cooldownMin: 4 * 60 * 1000,
+    cooldownMax: 6 * 60 * 1000,
+    fire() {
+      const dur = spawnWitch();
+      pushScene(Math.min(16000, Math.ceil(dur * 1000)));
+      // Bats no longer ride alongside as an escort — they erupt from the
+      // ground when one of her golden sparks lands (loop-path flybys
+      // only, where the spark trail is enabled). See startWitchSparkTrail.
+    },
+  },
+  {
+    id: "mummy",
+    cooldownMin: 7 * 60 * 1000,
+    cooldownMax: 8 * 60 * 1000,
+    fire() {
+      spawnEgyptMummy();
+      pushScene(12000);
+    },
+  },
+  {
+    id: "band",
+    cooldownMin: 8 * 60 * 1000,
+    cooldownMax: 9 * 60 * 1000,
+    fire() {
+      spawnSkeletonBand();
+      pushScene(9000);
+    },
+  },
+];
+
+// First 90s seeds variety so a brand-new user sees several cast members
+// before the slower steady-state cadence kicks in. Mummy is held back so
+// the welcome window doesn't dump the entire cast at once.
+const SCENE_WELCOME_BURST = [
+  { id: "witch", at:  8000 },
+  { id: "chase", at: 50000 },
+  { id: "band",  at: 110000 },
+];
+
+const SCENE_TICK_MS = 30000;
+const _sceneLastFireAt = new Map();
+let _sceneLastFiredId  = null;
+
+function _pickNextScene(now) {
+  const eligible = SCENE_CAST.filter(c => {
+    if (c.id === _sceneLastFiredId) return false;
+    const last = _sceneLastFireAt.has(c.id) ? _sceneLastFireAt.get(c.id) : -Infinity;
+    return now - last >= c.cooldownMin;
+  });
+  if (eligible.length === 0) return null;
+
+  // Weight = how far past cooldownMin we are, relative to the cooldown
+  // window. Members that have waited longest get the highest pick chance.
+  const weights = eligible.map(c => {
+    const last    = _sceneLastFireAt.has(c.id) ? _sceneLastFireAt.get(c.id) : 0;
+    const overdue = Math.max(0, now - last - c.cooldownMin);
+    const window  = c.cooldownMax - c.cooldownMin || 1;
+    return 1 + Math.min(1, overdue / window) * 4;   // 1×–5× weight
+  });
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < eligible.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return eligible[i];
+  }
+  return eligible[eligible.length - 1];
+}
+
+function _fireScene(cast) {
+  if (document.hidden || !isHalloweenEnabled()) return;
+  cast.fire();
+  _sceneLastFireAt.set(cast.id, Date.now());
+  _sceneLastFiredId = cast.id;
+}
+
+function startSceneRotator() {
+  // Pre-record the welcome burst's scheduled fire times in
+  // _sceneLastFireAt so an early steady-state tick can't pick a cast
+  // member that's about to fire from the burst (otherwise the rotator
+  // would queue, say, chase at t=30s and the burst would fire chase
+  // again at t=50s — back-to-back repeat). The future timestamps make
+  // `now - last < 0 < cooldownMin`, so eligibility correctly fails.
+  const startedAt = Date.now();
+  SCENE_WELCOME_BURST.forEach(({ id, at }) => {
+    _sceneLastFireAt.set(id, startedAt + at);
+  });
+
+  // Welcome burst — overrides cooldowns to seed variety quickly.
+  SCENE_WELCOME_BURST.forEach(({ id, at }) => {
+    setTimeout(() => {
+      const cast = SCENE_CAST.find(c => c.id === id);
+      if (cast) _fireScene(cast);
+    }, at);
+  });
+
+  // Steady-state tick. Each wake-up considers eligible cast members and
+  // picks one weighted by overdue-ness. Skips silently when nothing has
+  // cooled down yet, when the tab is hidden, or when halloween is off.
+  setInterval(() => {
+    const next = _pickNextScene(Date.now());
+    if (next) _fireScene(next);
+  }, SCENE_TICK_MS);
 }
 
 function scheduleGhostFlybys() {
@@ -410,19 +1488,48 @@ function scheduleGhostFlybys() {
   } catch {}
 
   prepareAudio();
+  installHalloweenToggle();
+  scheduleBatFlock();      // ambient texture — runs independently of the rotator
+  startSceneRotator();     // chase / witch / mummy / band — coordinated
+}
 
-  function queueNext() {
-    const delay = 45000 + Math.random() * 10000; // 45–55s
-    setTimeout(() => {
-      spawnGhostFlyby();
-      queueNext();
-    }, delay);
+// Floating dev-only toggle. Halloween / Normal. Persists to localStorage.
+function installHalloweenToggle() {
+  if (document.getElementById("halloweenToggle")) return;
+
+  const btn = document.createElement("button");
+  btn.id = "halloweenToggle";
+  btn.type = "button";
+  btn.className = "halloween-toggle";
+  btn.setAttribute("aria-label", "Toggle Halloween mode");
+  btn.innerHTML = '<span class="halloween-toggle__ico">🎃</span>';
+
+  function syncState() {
+    const on = isHalloweenEnabled();
+    btn.classList.toggle("is-on",  on);
+    btn.classList.toggle("is-off", !on);
+    btn.title = on ? "Halloween mode — click to switch to normal" : "Normal mode — click to switch to Halloween";
+    document.body.classList.toggle("halloween-mode-off", !on);
+    if (!on) {
+      // Remove any active vignette so the page snaps back to normal.
+      document.getElementById("ghostHorrorOverlay")?.classList.remove("is-active");
+      // Cancel any in-flight skele-cry so the audio stops along with visuals.
+      if (skeleCryStartTimer) { clearTimeout(skeleCryStartTimer); skeleCryStartTimer = null; }
+      if (skeleCryStopTimer)  { clearTimeout(skeleCryStopTimer);  skeleCryStopTimer  = null; }
+      try { skeleCryAudio?.pause(); if (skeleCryAudio) skeleCryAudio.currentTime = 0; } catch {}
+      // Snap the guitarist riff off too if the band is mid-show.
+      stopGuitaristRiff();
+    }
   }
-  // First flyby: around 20 seconds after mount.
-  setTimeout(() => {
-    spawnGhostFlyby();
-    queueNext();
-  }, 18000 + Math.random() * 4000);
+
+  btn.addEventListener("click", () => {
+    const next = !isHalloweenEnabled();
+    try { localStorage.setItem(HALLOWEEN_FLAG_KEY, next ? "on" : "off"); } catch {}
+    syncState();
+  });
+
+  document.body.appendChild(btn);
+  syncState();
 }
 
 function wireDevLogout() {
@@ -677,29 +1784,571 @@ function ensureStyles() {
       100% { transform: translate(120vw, 0); opacity: 0; }
     }
 
-    /* horror vignette: pulsing dark edges, faint red glow */
+    /* witch on broomstick — bigger, slower, with a slight broom tilt */
+    .witch-fly {
+      position: fixed;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      user-select: none;
+      z-index: 9991;
+      opacity: 0;
+      will-change: transform, opacity;
+      animation-timing-function: linear;       /* loop is constant-speed; entry & exit override per-keyframe */
+      animation-fill-mode: both;
+      animation-iteration-count: 1;
+      /* Pivot the spin from the lower-middle of the wrapper so the swing
+         visibly orbits around her body instead of appearing to spin from her head. */
+      transform-origin: 50% 68%;
+    }
+    /* Golden spark trail — shed by the witch during her sweep-out phase.
+       Each spark falls straight to the bottom of the viewport at full
+       opacity. Body's overflow:hidden visually "swallows" them at the
+       bottom edge so they don't disappear, they vanish off-screen. */
+    .witch-spark {
+      position: fixed;
+      width:  var(--spark-size, 7px);
+      height: var(--spark-size, 7px);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 9990;
+      transform: translate(-50%, -50%);
+      background: radial-gradient(circle,
+        rgba(255, 240, 170, 1)  0%,
+        rgba(255, 200,  80, 0.9) 35%,
+        rgba(255, 160,  40, 0.6) 65%,
+        rgba(255, 140,  20, 0.0) 100%);
+      filter:
+        blur(0.5px)
+        drop-shadow(0 0 6px rgba(255, 200, 80, 0.85))
+        drop-shadow(0 0 14px rgba(255, 140, 30, 0.55));
+      animation: witchSparkFall var(--spark-dur, 1.6s) cubic-bezier(0.4, 0, 0.7, 1) forwards;
+      will-change: transform;
+    }
+    @keyframes witchSparkFall {
+      0%   { transform: translate(-50%, -50%); }
+      100% {
+        transform: translate(
+          calc(-50% + var(--spark-drift, 0px)),
+          calc(-50% + var(--spark-fall, 800px))
+        );
+      }
+    }
+
+    /* Bat burst — fired when a loaded golden spark lands. Each bat starts
+       at the impact point (left set inline, anchored to bottom: 0) and
+       arcs outward/upward to its end offset, fading as it goes. The
+       inner video fills the wrapper; the wrapper carries the motion. */
+    .bat-burst {
+      position: fixed;
+      pointer-events: none;
+      z-index: 9990;
+      opacity: 0;
+      will-change: transform, opacity;
+      animation-name: batBurst;
+      animation-timing-function: cubic-bezier(0.2, 0.65, 0.4, 1);
+      animation-fill-mode: forwards;
+    }
+    .bat-burst > video {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    @keyframes batBurst {
+      0%   { transform: translate(-50%, 0) scale(0.4) rotate(0deg); opacity: 0; }
+      8%   { opacity: 1; }
+      88%  { opacity: 1; }
+      100% {
+        transform:
+          translate(calc(-50% + var(--bat-end-x, 0px)), var(--bat-end-y, -100vh))
+          scale(1)
+          rotate(var(--bat-spin, 0deg));
+        opacity: 0;
+      }
+    }
+
+    /* Default path is the CCW circular loop. Modifier classes pick another. */
+    .witch-fly { animation-name: witchFlySquadron; }
+    .witch-fly--swing-cw      { animation-name: witchFlySquadronCw; }
+    .witch-fly--path-zigzag   { animation-name: witchFlyZigzag; }
+    .witch-fly--path-straight { animation-name: witchFlyStraight; }
+    .witch-fly--path-up       { animation-name: witchFlyUp; }
+    .witch-fly--path-down     { animation-name: witchFlyDown; }
+    .witch-fly--leader {
+      filter: drop-shadow(0 8px 22px rgba(124, 50, 220, 0.55))
+              drop-shadow(0 0 28px rgba(168, 85, 247, 0.30));
+    }
+    /* Leader source clip is mirrored from the followers — flip her horizontally
+       so she actually faces the direction the squadron is flying. */
+    .witch-fly--leader .witch-fly__sprite {
+      transform: scaleX(-1);
+    }
+    .witch-fly--leader::before { width: 220px; height: 12px; right: 70%; }
+    .witch-fly--leader::after  { width: 130px; height: 6px;  right: 72%; }
+
+    .witch-fly__sprite {
+      width: 100%;
+      height: auto;
+      display: block;
+      filter: drop-shadow(0 6px 14px rgba(124, 50, 220, 0.45))
+              drop-shadow(0 0 16px rgba(168, 85, 247, 0.22));
+    }
+
+    /* Subtle glowing trail behind the broom — natural, not glaring. */
+    .witch-fly::before {
+      content: "";
+      position: absolute;
+      top: 58%;
+      right: 72%;
+      width: 160px;
+      height: 10px;
+      transform: translateY(-50%);
+      border-radius: 999px;
+      background: linear-gradient(to left,
+        rgba(168, 85, 247, 0.65) 0%,
+        rgba(124, 107, 255, 0.40) 35%,
+        rgba(168, 85, 247, 0.10) 75%,
+        rgba(168, 85, 247, 0)    100%);
+      filter: blur(7px);
+      animation: witchTrailPulse 0.85s ease-in-out infinite;
+      pointer-events: none;
+    }
+    .witch-fly::after {
+      content: "";
+      position: absolute;
+      top: 58%;
+      right: 74%;
+      width: 95px;
+      height: 5px;
+      transform: translateY(-50%);
+      border-radius: 999px;
+      background: linear-gradient(to left,
+        rgba(255, 230, 255, 0.55) 0%,
+        rgba(168, 85, 247, 0.30) 45%,
+        rgba(168, 85, 247, 0)    100%);
+      filter: blur(3px);
+      animation: witchTrailPulse 0.6s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    @keyframes witchTrailPulse {
+      0%, 100% { opacity: 0.55; }
+      50%      { opacity: 0.85; }
+    }
+
+    /* Squadron path — three phases:
+         0–25%   : ease-out entry from off-screen left
+         25–70%  : full 360° circular loop, traced at constant speed.
+                   Witch ends back at her loop-start position; sprite rotates
+                   one full turn matching the path tangent.
+         70–100% : cubic-bezier ease-out — fast immediate sweep right out of frame.
+       Entry and exit phases override the wrapper's linear timing per-keyframe. */
+    @keyframes witchFlySquadron {
+      0% {
+        transform: translate(-26vw, 0) rotate(-6deg);
+        opacity: 0;
+        animation-timing-function: cubic-bezier(0.25, 0, 0.4, 1);
+      }
+      25% {
+        /* Loop start: cruising at (22vw, 0), facing right. Inherits linear from here. */
+        transform: translate(22vw, 0) rotate(-6deg);
+        opacity: 1;
+      }
+      /* Loop quarters — counter-clockwise full circle around (22vw, -5vw). */
+      31% { transform: translate(25.5vw, -1.5vw) rotate(-51deg); }   /*  45° */
+      36% { transform: translate(27vw,   -5vw)   rotate(-96deg); }   /*  90° — right side, moving up */
+      42% { transform: translate(25.5vw, -8.5vw) rotate(-141deg); }  /* 135° */
+      48% { transform: translate(22vw,   -10vw)  rotate(-186deg); }  /* 180° — top, inverted */
+      54% { transform: translate(18.5vw, -8.5vw) rotate(-231deg); }  /* 225° */
+      59% { transform: translate(17vw,   -5vw)   rotate(-276deg); }  /* 270° — left side, moving down */
+      65% { transform: translate(18.5vw, -1.5vw) rotate(-321deg); }  /* 315° */
+      70% {
+        /* Loop complete at (22vw, 0), one full rotation done. Snap into the sweep. */
+        transform: translate(22vw, 0) rotate(-366deg);
+        animation-timing-function: cubic-bezier(0.2, 0.85, 0.4, 1);
+      }
+      100% {
+        transform: translate(135vw, 0) rotate(-366deg);
+        opacity: 0;
+      }
+    }
+
+    /* Same path, but the loop swings in the opposite direction (clockwise).
+       The squadron picks one direction per flyby via the JS so all witches
+       in the formation swing the same way. */
+    @keyframes witchFlySquadronCw {
+      0% {
+        transform: translate(-26vw, 0) rotate(6deg);
+        opacity: 0;
+        animation-timing-function: cubic-bezier(0.25, 0, 0.4, 1);
+      }
+      25% {
+        transform: translate(22vw, 0) rotate(6deg);
+        opacity: 1;
+      }
+      31% { transform: translate(18.5vw, -1.5vw) rotate(51deg); }
+      36% { transform: translate(17vw,   -5vw)   rotate(96deg); }
+      42% { transform: translate(18.5vw, -8.5vw) rotate(141deg); }
+      48% { transform: translate(22vw,   -10vw)  rotate(186deg); }
+      54% { transform: translate(25.5vw, -8.5vw) rotate(231deg); }
+      59% { transform: translate(27vw,   -5vw)   rotate(276deg); }
+      65% { transform: translate(25.5vw, -1.5vw) rotate(321deg); }
+      70% {
+        transform: translate(22vw, 0) rotate(366deg);
+        animation-timing-function: cubic-bezier(0.2, 0.85, 0.4, 1);
+      }
+      100% {
+        transform: translate(135vw, 0) rotate(366deg);
+        opacity: 0;
+      }
+    }
+
+    /* Zigzag — heavy weave across the viewport, no looping. */
+    @keyframes witchFlyZigzag {
+      0%   { transform: translate(-26vw, 0)         rotate(-5deg);   opacity: 0; animation-timing-function: cubic-bezier(0.25, 0, 0.4, 1); }
+      10%  { opacity: 1; }
+      22%  { transform: translate(15vw,  -7vw)      rotate(-15deg); }
+      38%  { transform: translate(35vw,   7vw)      rotate(8deg); }
+      55%  { transform: translate(55vw,  -8vw)      rotate(-15deg); }
+      72%  { transform: translate(78vw,   5vw)      rotate(7deg); }
+      88%  { transform: translate(100vw, -5vw)      rotate(-12deg); opacity: 1; }
+      100% { transform: translate(135vw, 0)         rotate(-5deg);  opacity: 0; }
+    }
+
+    /* Straight — calm horizontal sweep with a tiny dip. */
+    @keyframes witchFlyStraight {
+      0%   { transform: translate(-26vw, 0)         rotate(-4deg);  opacity: 0; animation-timing-function: cubic-bezier(0.25, 0, 0.4, 1); }
+      10%  { opacity: 1; }
+      40%  { transform: translate(35vw,  -2vw)      rotate(-3deg); }
+      70%  { transform: translate(80vw,   1.5vw)    rotate(-5deg); }
+      90%  { opacity: 1; }
+      100% { transform: translate(135vw, 0)         rotate(-4deg);  opacity: 0; }
+    }
+
+    /* Vertical — bottom to top. Witch enters below the viewport, swings
+       up through center with a slight S-curve, exits off the top. The
+       --witch-x CSS variable lets followers offset horizontally. */
+    @keyframes witchFlyUp {
+      0%   { transform: translate(calc(50vw + var(--witch-x, 0vw)), 110vh) rotate(-90deg); opacity: 0; animation-timing-function: cubic-bezier(0.25, 0, 0.4, 1); }
+      12%  { opacity: 1; }
+      35%  { transform: translate(calc(50vw + var(--witch-x, 0vw) - 4vw), 50vh)  rotate(-83deg); }
+      65%  { transform: translate(calc(50vw + var(--witch-x, 0vw) + 3vw),  -2vh) rotate(-97deg); }
+      88%  { opacity: 1; }
+      100% { transform: translate(calc(50vw + var(--witch-x, 0vw)), -25vh)  rotate(-90deg); opacity: 0; }
+    }
+
+    /* Vertical — top to bottom. Mirror of witchFlyUp. */
+    @keyframes witchFlyDown {
+      0%   { transform: translate(calc(50vw + var(--witch-x, 0vw)), -25vh) rotate(90deg); opacity: 0; animation-timing-function: cubic-bezier(0.25, 0, 0.4, 1); }
+      12%  { opacity: 1; }
+      35%  { transform: translate(calc(50vw + var(--witch-x, 0vw) + 4vw), 25vh) rotate(83deg); }
+      65%  { transform: translate(calc(50vw + var(--witch-x, 0vw) - 3vw), 75vh) rotate(97deg); }
+      88%  { opacity: 1; }
+      100% { transform: translate(calc(50vw + var(--witch-x, 0vw)), 110vh) rotate(90deg); opacity: 0; }
+    }
+
+    /* floating dev toggle: halloween / normal */
+    .halloween-toggle {
+      position: fixed;
+      bottom: 18px;
+      left: 18px;
+      z-index: 10001;
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      border: 1px solid rgba(168, 85, 247, 0.45);
+      background: rgba(36, 18, 90, 0.85);
+      color: #fff;
+      font-size: 22px;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.45), 0 0 0 0 rgba(168, 85, 247, 0.0);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, opacity 0.2s ease, filter 0.2s ease;
+    }
+    .halloween-toggle:hover {
+      transform: scale(1.08);
+      box-shadow: 0 8px 24px rgba(124, 50, 220, 0.45), 0 0 0 6px rgba(168, 85, 247, 0.10);
+    }
+    .halloween-toggle.is-off {
+      background: rgba(40, 40, 50, 0.78);
+      border-color: rgba(255, 255, 255, 0.18);
+      filter: saturate(0.25) brightness(0.85);
+      opacity: 0.75;
+    }
+    .halloween-toggle__ico {
+      line-height: 1;
+      filter: drop-shadow(0 0 6px rgba(255, 140, 0, 0.4));
+    }
+    .halloween-toggle.is-off .halloween-toggle__ico {
+      filter: none;
+    }
+
+    /* When the dev flips to Normal mode, suppress all Halloween visuals
+       even if a flyby is mid-flight. The flyby scheduler is already gated,
+       but this hides any stragglers. */
+    body.halloween-mode-off .ghost-fly,
+    body.halloween-mode-off .witch-fly,
+    body.halloween-mode-off .witch-spark,
+    body.halloween-mode-off .bat-burst,
+    body.halloween-mode-off .chase-fly,
+    body.halloween-mode-off .skeleton-band,
+    body.halloween-mode-off .grave-cameo,
+    body.halloween-mode-off .ghost-horror-overlay {
+      display: none !important;
+    }
+
+    /* Shared style for video-based sprites — fills its wrapper. */
+    .halloween-video-sprite {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    /* Skeleton-vs-zombie chase — sprints across the lower band of the
+       viewport. Uses its own keyframes so the pair stays grounded instead
+       of bobbing through the air with the airborne flock. Bottom-based
+       anchor keeps feet at ground level regardless of sprite size. */
+    .chase-fly {
+      position: fixed;
+      bottom: 4%;
+      left: 0;
+      pointer-events: none;
+      user-select: none;
+      z-index: 9989;
+      opacity: 0;
+      will-change: transform, opacity;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-iteration-count: 1;
+      filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.55));
+    }
+    .chase-zombie {
+      filter: drop-shadow(0 6px 14px rgba(80, 30, 30, 0.55))
+              drop-shadow(0 0 12px rgba(60, 20, 80, 0.30));
+    }
+    /* Mummy lumbers — slightly lower z-index so he reads as background
+       relative to the runner-vs-zombie chase. */
+    .chase-mummy {
+      z-index: 9988;
+      filter: drop-shadow(0 6px 14px rgba(70, 50, 20, 0.55))
+              drop-shadow(0 0 14px rgba(180, 150, 80, 0.25));
+    }
+
+    /* Grave — stationary, bottom-anchored cameo. */
+    .grave-cameo {
+      position: fixed;
+      width: 170px;
+      z-index: 9988;
+      pointer-events: none;
+      opacity: 0;
+      animation: graveEnter 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+      filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.6));
+    }
+    /* Obstacle variant: sits at center-stage, sized so the skeleton's
+       jump (-120px) clears it. The chase wrapper jumps 120px high; the
+       grave is 180px wide so the visual collision area is well-defined. */
+    .grave-cameo--obstacle {
+      width: 180px;
+      z-index: 9989;       /* slightly above the chase characters' z-index */
+    }
+    .grave-cameo.is-leaving {
+      animation: graveExit 0.9s ease-in forwards;
+    }
+    @keyframes graveEnter {
+      0%   { opacity: 0; transform: translateY(30px) scale(0.95); }
+      100% { opacity: 1; transform: translateY(0)    scale(1); }
+    }
+    @keyframes graveExit {
+      0%   { opacity: 1; transform: translateY(0)    scale(1); }
+      100% { opacity: 0; transform: translateY(20px) scale(0.95); }
+    }
+    .chase--ltr { animation-name: chaseLtr; }
+    .chase--rtl { animation-name: chaseRtl; }
+    /* Skeleton-with-obstacle override: he vaults the grave at midpoint.
+       Higher specificity (3 classes) overrides .chase--ltr / .chase--rtl. */
+    .chase-skeleton.chase--with-obstacle.chase--ltr { animation-name: chaseLtrSkeletonJump; }
+    .chase-skeleton.chase--with-obstacle.chase--rtl { animation-name: chaseRtlSkeletonJump; }
+
+    @keyframes chaseLtr {
+      0%   { transform: translate(-25vw, 0); opacity: 0; }
+      8%   { opacity: 1; }
+      50%  { transform: translate(50vw, -8px); }
+      92%  { opacity: 1; }
+      100% { transform: translate(125vw, 0); opacity: 0; }
+    }
+    @keyframes chaseRtl {
+      0%   { transform: translate(125vw, 0) scaleX(-1); opacity: 0; }
+      8%   { opacity: 1; }
+      50%  { transform: translate(50vw, -8px) scaleX(-1); }
+      92%  { opacity: 1; }
+      100% { transform: translate(-25vw, 0) scaleX(-1); opacity: 0; }
+    }
+
+    /* Skeleton-jump-over-grave keyframes. Short, snappy hop: pushes off
+       at 50%, peaks at 56% over the grave at 59vw, lands at 62% (12% of
+       dur airtime, ~1.3s on the avg chase). Shifted +6% from the prior
+       50%-peak version to delay the jump by ~0.7s on an 11s chase — the
+       grave's x position moves to 59vw to stay aligned with the new peak.
+       Intermediate keyframes at 53% / 59% sample a parabolic arc so a
+       linear timing function still reads as a natural curve — without the
+       apex hang that eased curves produce. Horizontal positions track the
+       linear chase progression (1.5vw per 1%) at every step, so he keeps
+       moving forward at the same pace through the entire jump. */
+    @keyframes chaseLtrSkeletonJump {
+      0%   { transform: translate(-25vw, 0); opacity: 0; }
+      8%   { opacity: 1; }
+      50%  { transform: translate(50vw, 0);     animation-timing-function: linear; }
+      53%  { transform: translate(54.5vw, -35px); animation-timing-function: linear; }
+      56%  { transform: translate(59vw, -50px);   animation-timing-function: linear; }
+      59%  { transform: translate(63.5vw, -35px); animation-timing-function: linear; }
+      62%  { transform: translate(68vw, 0); }
+      92%  { opacity: 1; }
+      100% { transform: translate(125vw, 0); opacity: 0; }
+    }
+    @keyframes chaseRtlSkeletonJump {
+      0%   { transform: translate(125vw, 0) scaleX(-1); opacity: 0; }
+      8%   { opacity: 1; }
+      50%  { transform: translate(50vw, 0) scaleX(-1);     animation-timing-function: linear; }
+      53%  { transform: translate(45.5vw, -35px) scaleX(-1); animation-timing-function: linear; }
+      56%  { transform: translate(41vw, -50px) scaleX(-1);   animation-timing-function: linear; }
+      59%  { transform: translate(36.5vw, -35px) scaleX(-1); animation-timing-function: linear; }
+      62%  { transform: translate(32vw, 0) scaleX(-1); }
+      92%  { opacity: 1; }
+      100% { transform: translate(-25vw, 0) scaleX(-1); opacity: 0; }
+    }
+
+    /* Speech bubbles above the runners. They flash in once, hold briefly,
+       then fade upward and disappear — total lifecycle ~1.5s. The wrapper
+       flips on RTL keyframes, so bubbles compensate with scaleX(-1) to
+       keep the text readable. */
+    .chase-bubble {
+      position: absolute;
+      bottom: calc(100% + 12px);
+      left: 50%;
+      padding: 6px 14px;
+      border-radius: 16px;
+      font: 800 14px/1.2 "Inter", system-ui, sans-serif;
+      letter-spacing: 0.2px;
+      white-space: nowrap;
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+      pointer-events: none;
+      z-index: 1;
+      opacity: 0;
+      animation: bubbleLife 3s ease-out forwards;
+    }
+    .chase-bubble::after {
+      content: "";
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 7px solid transparent;
+      border-right: 7px solid transparent;
+      border-top: 8px solid currentColor;
+      filter: drop-shadow(0 1px 0 rgba(0,0,0,0.2));
+    }
+    .chase-bubble--skeleton {
+      background: #ffffff;
+      color: #b91c1c;
+      border: 2px solid #fecaca;
+    }
+    .chase-bubble--skeleton::after {
+      border-top-color: #ffffff;
+    }
+    .chase-bubble--zombie {
+      background: rgba(20, 12, 24, 0.96);
+      color: #fca5a5;
+      border: 2px solid rgba(248, 113, 113, 0.5);
+      letter-spacing: 1px;
+      text-transform: lowercase;
+    }
+    .chase-bubble--zombie::after {
+      border-top-color: rgba(20, 12, 24, 0.96);
+    }
+    .chase--rtl .chase-bubble {
+      animation-name: bubbleLifeRtl;
+    }
+    @keyframes bubbleLife {
+      0%   { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.9); }
+      18%  { opacity: 1; transform: translateX(-50%) translateY(0)   scale(1); }
+      70%  { opacity: 1; transform: translateX(-50%) translateY(-2px) scale(1); }
+      100% { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(0.96); }
+    }
+    @keyframes bubbleLifeRtl {
+      0%   { opacity: 0; transform: translateX(-50%) scaleX(-1) translateY(8px); }
+      18%  { opacity: 1; transform: translateX(-50%) scaleX(-1) translateY(0); }
+      70%  { opacity: 1; transform: translateX(-50%) scaleX(-1) translateY(-2px); }
+      100% { opacity: 0; transform: translateX(-50%) scaleX(-1) translateY(-14px); }
+    }
+
+    /* Skeleton band — guitarist + dancer in a bottom corner. They share
+       a wrapper so they enter and leave together. */
+    .skeleton-band {
+      position: fixed;
+      bottom: 12px;
+      z-index: 9989;
+      pointer-events: none;
+      display: flex;
+      align-items: flex-end;
+      gap: 4px;
+      opacity: 0;
+      animation: dancingSkeletonEnter 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+      filter: drop-shadow(0 6px 14px rgba(124, 50, 220, 0.40));
+    }
+    .skeleton-band--left  { left: 14px; }
+    .skeleton-band--right { right: 14px; }
+    .skeleton-band.is-leaving {
+      animation: dancingSkeletonExit 1.2s ease-in forwards;
+    }
+    .skeleton-band__member {
+      display: block;
+      height: auto;
+    }
+    .skeleton-band__guitar { width: 338px; }
+    .skeleton-band__dancer { width: 195px; }
+    /* The dancer's source clip faces one direction; flip when she's on
+       the opposite side of the guitarist so she always faces him. */
+    .skeleton-band__dancer--flip { transform: scaleX(-1); }
+    @keyframes dancingSkeletonEnter {
+      0%   { opacity: 0; transform: translateY(40px) scale(0.92); }
+      100% { opacity: 1; transform: translateY(0)    scale(1); }
+    }
+    @keyframes dancingSkeletonExit {
+      0%   { opacity: 1; transform: translateY(0)    scale(1); }
+      100% { opacity: 0; transform: translateY(40px) scale(0.92); }
+    }
+
+    /* Subtle night-time vignette. Strength scales with how many scenes
+       are active (controlled by --horror-strength, set by JS). A lone
+       creature gets a faint shift; overlapping scenes darken further. */
     .ghost-horror-overlay {
       position: fixed;
       inset: 0;
       pointer-events: none;
       z-index: 9985;
       background:
-        radial-gradient(circle at 50% 40%, transparent 35%, rgba(0,0,0,0.55) 100%),
-        radial-gradient(circle at 50% 50%, rgba(120, 0, 30, 0.18) 0%, transparent 60%);
+        radial-gradient(circle at 50% 40%, transparent 45%, rgba(0,0,0,0.30) 100%),
+        radial-gradient(circle at 50% 50%, rgba(50, 30, 120, 0.12) 0%, transparent 70%),
+        linear-gradient(to bottom, rgba(15, 20, 50, 0.10), rgba(5, 8, 25, 0.18));
       opacity: 0;
-      transition: opacity 1.2s ease-in-out;
+      transition: opacity 1.6s ease-in-out;
     }
     .ghost-horror-overlay.is-active {
-      opacity: 1;
-      animation: horrorPulse 2.4s ease-in-out infinite;
+      opacity: var(--horror-strength, 0.45);
+      animation: horrorPulse 3.2s ease-in-out infinite;
     }
     @keyframes horrorPulse {
-      0%, 100% { filter: brightness(1); }
-      50%      { filter: brightness(1.12); }
+      0%, 100% { filter: brightness(0.96); }
+      50%      { filter: brightness(1.02); }
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .ghost-fly, .ghost-horror-overlay { display: none !important; }
+      .ghost-fly, .witch-fly, .witch-spark, .bat-burst, .chase-fly, .skeleton-band, .grave-cameo, .ghost-horror-overlay {
+        display: none !important;
+      }
     }
 
     @media (max-width: 640px) {
@@ -709,6 +2358,10 @@ function ensureStyles() {
       .ghost-modal__actions { flex-direction: column; gap: 8px; }
       .ghost-modal__skip, .ghost-modal__cta { width: 100%; }
       .ghost-fly { opacity: 0.6; }
+      .witch-fly { opacity: 0.85; }
+      .skeleton-band__guitar { width: 248px; }
+      .skeleton-band__dancer { width: 143px; }
+      .chase-fly { transform-origin: center; }
     }
 
     /* ═══ cinematic intro ═══ */
@@ -725,7 +2378,8 @@ function ensureStyles() {
         radial-gradient(ellipse at 50% 45%, #1a0208 0%, #050104 55%, #000 100%);
       overflow: hidden;
       opacity: 0;
-      transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      /* Long, gentle ease for a buttery fade-in. */
+      transition: opacity 1.8s cubic-bezier(0.22, 0.61, 0.36, 1);
     }
     .ghost-intro__atmos {
       position: absolute;
@@ -766,7 +2420,9 @@ function ensureStyles() {
     .ghost-intro--closing {
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+      /* Equally smooth fade-out — slower than before so the cinematic
+         tapers gently rather than snapping out. */
+      transition: opacity 1.4s cubic-bezier(0.22, 0.61, 0.36, 1);
     }
 
     /* Vignette — heavy dark edges, claustrophobic feel */
@@ -835,6 +2491,7 @@ function ensureStyles() {
       left: -360px;
       z-index: 4;   /* above skeleton so the flame overlaps his chin */
       transform: translate3d(0, 0, 0);
+      opacity: 0;   /* invisible until phase-enter so it can fade in alongside drifting */
       filter:
         drop-shadow(0 -6px 22px rgba(255, 160, 50, 0.9))
         drop-shadow(0 0 40px rgba(255, 100, 30, 0.6));
@@ -842,16 +2499,16 @@ function ensureStyles() {
     }
     .ghost-intro.phase-enter .ghost-intro__candle {
       animation:
-        candleFloatIn 5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards,
+        candleFloatIn 5.6s cubic-bezier(0.22, 0.61, 0.36, 1) forwards,
         candleFlicker 0.45s ease-in-out infinite alternate;
     }
     @keyframes candleFloatIn {
-      0%   { left: -360px; transform: translate3d(0, 0, 0) rotate(-3deg); }
-      20%  { transform: translate3d(0, -10px, 0) rotate(1deg); }
-      40%  { transform: translate3d(0, -16px, 0) rotate(2deg); }
-      60%  { transform: translate3d(0, -8px, 0) rotate(-1deg); }
-      80%  { transform: translate3d(0, 4px, 0)  rotate(0.5deg); }
-      100% { left: calc(50% - 160px); transform: translate3d(0, 0, 0) rotate(0); }
+      0%   { left: -360px; opacity: 0;   transform: translate3d(0, 0, 0) rotate(-3deg); }
+      14%  {               opacity: 0.55; }
+      30%  {               opacity: 1;    transform: translate3d(0, -10px, 0) rotate(1deg); }
+      55%  { transform: translate3d(0, -14px, 0) rotate(1.5deg); }
+      78%  { transform: translate3d(0, -6px, 0)  rotate(-0.5deg); }
+      100% { left: calc(50% - 160px); opacity: 1; transform: translate3d(0, 0, 0) rotate(0); }
     }
     @keyframes candleFlicker {
       from { filter:
@@ -892,12 +2549,13 @@ function ensureStyles() {
         drop-shadow(0 0 24px rgba(255, 120, 40, 0.28));
     }
     .ghost-intro.phase-skeleton .ghost-intro__skeleton {
-      animation: skeletonPopIn 0.7s cubic-bezier(0.2, 1.05, 0.3, 1) forwards;
+      /* Smoother arrival — no bounce, longer ramp, gradual opacity. */
+      animation: skeletonPopIn 1.4s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
     }
     @keyframes skeletonPopIn {
-      0%   { opacity: 0; transform: scale(0.7) translateY(30px); filter: drop-shadow(0 0 0 rgba(0,0,0,0)); }
-      60%  { opacity: 1; transform: scale(1.05) translateY(-4px); }
-      100% { opacity: 1; transform: scale(1) translateY(0);
+      0%   { opacity: 0;   transform: scale(0.85) translateY(20px); filter: drop-shadow(0 0 0 rgba(0,0,0,0)); }
+      40%  { opacity: 0.55; }
+      100% { opacity: 1;   transform: scale(1)    translateY(0);
              filter: drop-shadow(0 18px 50px rgba(0, 0, 0, 0.85))
                      drop-shadow(0 -4px 18px rgba(255, 120, 40, 0.25)); }
     }
@@ -967,8 +2625,13 @@ function ensureStyles() {
       top: 0;
       left: 0;
       opacity: 0;
-      filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.55))
-              drop-shadow(0 0 14px rgba(88, 28, 135, 0.35));
+      /* Brighter against the dark cinematic scene: lift the silhouette,
+         add a warm candle-lit halo, and keep a dark depth-shadow underneath. */
+      filter:
+        brightness(1.35) saturate(1.2) contrast(1.05)
+        drop-shadow(0 0 6px  rgba(255, 200, 120, 0.85))
+        drop-shadow(0 0 18px rgba(255, 110,  30, 0.55))
+        drop-shadow(0 4px 10px rgba(0, 0, 0, 0.7));
       will-change: transform, opacity;
       animation-timing-function: linear;
       animation-fill-mode: both;
@@ -1089,22 +2752,27 @@ function ensureStyles() {
     }
 
     .ghost-intro__skip {
-      position: absolute;
+      /* Lives outside the .ghost-intro overlay so the overlay's fade-in
+         doesn't gate its visibility — it's clickable from frame zero. */
+      position: fixed;
       top: 20px; right: 20px;
       padding: 9px 16px;
       border-radius: 999px;
       border: 1px solid rgba(255, 255, 255, 0.3);
-      background: rgba(0, 0, 0, 0.45);
-      color: rgba(255, 255, 255, 0.88);
+      background: rgba(0, 0, 0, 0.55);
+      color: rgba(255, 255, 255, 0.92);
       font: 700 0.82rem/1 system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
       cursor: pointer;
       backdrop-filter: blur(4px);
-      transition: background 0.15s, border-color 0.15s;
+      z-index: 1000001;     /* one above .ghost-intro */
+      opacity: 1;
+      transition: background 0.18s ease, border-color 0.18s ease, opacity 0.35s ease;
     }
     .ghost-intro__skip:hover {
       background: rgba(255, 255, 255, 0.14);
       border-color: rgba(255, 255, 255, 0.55);
     }
+    .ghost-intro__skip--leaving { opacity: 0; pointer-events: none; }
 
     @media (max-width: 640px) {
       .ghost-intro__candle   { width: 130px; top: 48%; left: calc(50% - 105px) !important; }

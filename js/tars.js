@@ -22,6 +22,26 @@ const $ = (id) => document.getElementById(id);
 
 function buildSystemPrompt(ctx) {
   const now = new Date();
+
+  // Resume analysis block — included when the student has uploaded a CV
+  const raLines = [];
+  if (typeof ctx.resumeAtsScore === "number") {
+    raLines.push(`CV ATS score: ${ctx.resumeAtsScore}%`);
+    if (ctx.resumeSkillsMatch !== null) raLines.push(`CV skills match: ${ctx.resumeSkillsMatch}%`);
+    if (ctx.resumeSummary) raLines.push(`CV verdict: ${ctx.resumeSummary}`);
+    if (ctx.detectedSkills?.length) raLines.push(`Skills on CV: ${ctx.detectedSkills.slice(0, 15).join(", ")}`);
+    if (ctx.missingSkills?.length)  raLines.push(`Gap skills (not yet on CV): ${ctx.missingSkills.join(", ")}`);
+    if (ctx.improvements?.length)   raLines.push(`Top CV improvements needed:\n${ctx.improvements.map((t, i) => `  ${i + 1}. ${t}`).join("\n")}`);
+    if (ctx.strengths?.length)      raLines.push(`CV strengths: ${ctx.strengths.join("; ")}`);
+    if (ctx.sectionScores) {
+      const ss = ctx.sectionScores;
+      const parts = Object.entries(ss).filter(([, v]) => typeof v === "number").map(([k, v]) => `${k} ${v}`);
+      if (parts.length) raLines.push(`Section scores: ${parts.join(", ")}`);
+    }
+    if (ctx.lastAnalyzedRole) raLines.push(`Last analyzed against role: ${ctx.lastAnalyzedRole}`);
+    if (ctx.analysisUploads > 1) raLines.push(`Resume uploads so far: ${ctx.analysisUploads}`);
+  }
+
   const state = [
     `Today: ${now.toDateString()}`,
     ctx.applications !== undefined && `Applications submitted: ${ctx.applications}`,
@@ -31,13 +51,14 @@ function buildSystemPrompt(ctx) {
     ctx.rejected !== undefined && ctx.rejected > 0 && `Rejected applications: ${ctx.rejected}`,
     ctx.activeInternship && `Active internship: ${ctx.activeInternship.title} at ${ctx.activeInternship.companyName}`,
     ctx.taskCount !== undefined && `Assigned tasks: ${ctx.taskCount} total (${ctx.tasksDone || 0} submitted, ${ctx.taskCount - (ctx.tasksDone || 0)} remaining)`,
-    ctx.interviewDate && `Upcoming interview: ${ctx.interviewDate} — ${ctx.interviewLink ? 'join link available' : 'check dashboard for link'}`,
+    ctx.interviewDate && `Upcoming interview: ${ctx.interviewDate} — ${ctx.interviewLink ? "join link available" : "check dashboard for link"}`,
+    ...(raLines.length ? ["--- Resume Analysis ---", ...raLines] : []),
   ].filter(Boolean).join("\n");
 
   return composeSystemPrompt({
     studentName: ctx.name,
     studentState: state,
-    pageContext: "Student is on the Dashboard. Data above is live from the database.",
+    pageContext: "Student is on the Dashboard. Data above is live from the database. When the student asks questions about their CV, improvements, skills, or what to learn — use the Resume Analysis data above to give specific, personalised answers.",
   });
 }
 
@@ -54,6 +75,22 @@ async function loadContext(user) {
     if (sSnap.exists()) {
       const d = sSnap.data();
       ctx.name = d.name || ctx.name;
+
+      // Enrich TARS with full resume analysis so it can answer CV follow-up questions
+      const ra = d.resumeAnalysis;
+      if (ra && typeof ra.atsScore === "number") {
+        ctx.resumeAtsScore    = Math.max(0, Math.min(100, Math.round(ra.atsScore)));
+        ctx.resumeSkillsMatch = typeof ra.skillsMatch === "number" ? Math.max(0, Math.min(100, Math.round(ra.skillsMatch))) : null;
+        ctx.resumeSummary     = ra.summary || null;
+        ctx.detectedSkills    = Array.isArray(ra.detectedSkills) ? ra.detectedSkills : [];
+        ctx.missingSkills     = Array.isArray(ra.missingSkills)  ? ra.missingSkills  : [];
+        ctx.improvements      = Array.isArray(ra.improvements)   ? ra.improvements   : [];
+        ctx.strengths         = Array.isArray(ra.strengths)       ? ra.strengths       : [];
+        ctx.sectionScores     = ra.sectionScores || null;
+        ctx.lastAnalyzedRole  = ra._role || null;
+        // History length for context
+        ctx.analysisUploads   = Array.isArray(d.resumeAnalysisHistory) ? d.resumeAnalysisHistory.length : 1;
+      }
     }
   } catch {}
 

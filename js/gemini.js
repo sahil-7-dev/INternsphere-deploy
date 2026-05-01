@@ -52,8 +52,8 @@ export async function askGemini(opts = {}) {
   // Attach Firebase ID token for server-side auth verification + per-user rate limiting
   let authHeader = {};
   try {
-    const { auth } = await import("../firebase/firebase.js");
-    const token = auth.currentUser ? await auth.currentUser.getIdToken(true) : null;
+    const { auth } = await import("/firebase/firebase.js");
+    const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
     if (token) authHeader = { Authorization: `Bearer ${token}` };
   } catch {
     // Guest mode or auth unavailable — proceed without token

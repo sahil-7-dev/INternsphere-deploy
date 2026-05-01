@@ -57,7 +57,10 @@ function b64UrlDecode(str) {
 
 async function verifyFirebaseToken(idToken) {
   const projectId = process.env.FIREBASE_PROJECT_ID;
-  if (!projectId) throw new Error("FIREBASE_PROJECT_ID not configured");
+if (!projectId) throw new Error("FIREBASE_PROJECT_ID not configured");
+console.log("[debug] projectId:", JSON.stringify(projectId));
+console.log("[debug] token aud:", payload.aud);
+console.log("[debug] token iss:", payload.iss);
 
   const parts = idToken.split(".");
   if (parts.length !== 3) throw new Error("Invalid token format");

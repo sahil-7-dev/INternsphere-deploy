@@ -53,7 +53,7 @@ export async function askGemini(opts = {}) {
   let authHeader = {};
   try {
     const { auth } = await import("../firebase/firebase.js");
-    const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+    const token = auth.currentUser ? await auth.currentUser.getIdToken(true) : null;
     if (token) authHeader = { Authorization: `Bearer ${token}` };
   } catch {
     // Guest mode or auth unavailable — proceed without token

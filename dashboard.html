@@ -294,88 +294,21 @@
 
           <!-- right column -->
           <div class="stack">
-            <!-- ai resume analyzer -->
-            <article class="card" id="resumeAnalyzerCard">
+            <!-- ai resume analyzer teaser -->
+            <article class="card" id="resumeAnalyzerCard" style="cursor:pointer" onclick="location.href='resume-analyzer.html'">
               <div class="card-head">
                 <div>
                   <h2>AI Resume Analyzer</h2>
-                  <p class="muted" id="raMuted">Upload your resume to get an instant AI review.</p>
+                  <p class="muted">Get an instant ATS score, skill gaps &amp; role-fit review.</p>
                 </div>
-                <span class="chip" id="raChip">READY</span>
+                <span class="chip">AI</span>
               </div>
-
-              <!-- idle state -->
-              <div id="raIdle">
-                <p style="font-size:0.88rem;line-height:1.55;margin:4px 0 12px;opacity:0.78">
-                  Get an instant ATS score, section breakdown, rewrite suggestions, and targeted tips powered by Gemini.
-                  Drop a PDF resume to begin.
-                </p>
-              </div>
-
-              <!-- role selector (always visible when not loading) -->
-              <div id="raRoleWrap" style="margin-bottom:12px">
-                <label style="font-size:11px;font-weight:700;opacity:0.55;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Target role (optional)</label>
-                <select id="raRoleSelect" style="width:100%;padding:7px 10px;border-radius:8px;border:1px solid color-mix(in srgb,var(--text) 16%,transparent);background:color-mix(in srgb,var(--surface) 60%,transparent);color:var(--text);font-size:12.5px;cursor:pointer">
-                  <option value="">Loading roles…</option>
-                </select>
-                <p id="raRoleHint" style="font-size:11px;opacity:0.5;margin:4px 0 0;min-height:14px"></p>
-              </div>
-
-              <!-- loading state -->
-              <div id="raLoading" style="display:none;padding:16px 0">
-                <div class="meter" style="margin:4px 0">
-                  <span style="opacity:0.7">Analyzing…</span>
-                  <div class="bar"><i id="raLoadBar"
-                      style="width:0%;transition:width 3s cubic-bezier(0.16,1,0.3,1)"></i></div>
-                  <b style="opacity:0.6;font-family:ui-monospace,monospace" id="raLoadPct">0%</b>
-                </div>
-                <p style="font-size:0.82rem;opacity:0.6;margin:8px 0 0" id="raLoadStep">Parsing PDF…</p>
-              </div>
-
-              <!-- result state -->
-              <div id="raResult" style="display:none">
-                <div class="meter">
-                  <span>ATS Score</span>
-                  <div class="bar"><i id="raAtsBar" style="width: 0%"></i></div>
-                  <b id="raAtsVal">0%</b>
-                </div>
-                <div class="meter">
-                  <span>Skills Match</span>
-                  <div class="bar"><i id="raSkillsBar" style="width: 0%"></i></div>
-                  <b id="raSkillsVal">0%</b>
-                </div>
-                <!-- Role-fit row — shown only when a role was selected -->
-                <div id="raRoleSection" style="display:none">
-                  <div class="meter">
-                    <span id="raRoleName" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Role Fit</span>
-                    <div class="bar"><i id="raRoleBar" style="width:0%;transition:width 1s cubic-bezier(0.16,1,0.3,1)"></i></div>
-                    <b id="raRoleVal">0%</b>
-                  </div>
-                  <p id="raRoleFeedback" style="font-size:11.5px;opacity:0.65;margin:2px 0 8px;line-height:1.5"></p>
-                </div>
-                <div class="tip" id="raTip">—</div>
-                <details id="raDetails" style="margin-top:10px">
-                  <summary style="cursor:pointer;font-size:0.85rem;font-weight:700;opacity:0.78;padding:6px 0">Detailed
-                    review</summary>
-                  <div id="raDetailsBody" style="margin-top:8px;font-size:0.88rem;line-height:1.55"></div>
-                </details>
-                <!-- Gap-to-opportunity panel (populated async after analysis) -->
-                <div id="raGapOpp" style="display:none"></div>
-              </div>
-
-              <!-- error state -->
-              <div id="raError"
-                style="display:none;padding:12px 14px;border-radius:10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;font-size:0.85rem;line-height:1.5">
-              </div>
-
-              <input type="file" id="raFileInput" accept="application/pdf,.pdf" style="display:none">
-
+              <p style="font-size:0.88rem;line-height:1.55;margin:4px 0 16px;opacity:0.78">
+                Upload your PDF resume and get a detailed breakdown powered by Gemini — ATS score, section analysis, rewrite tips, and targeted role matching.
+              </p>
               <div class="card-foot">
-                <button class="btn btn-primary" id="raAnalyzeBtn" type="button">Analyze resume</button>
-                <button class="btn btn-ghost" id="raClearBtn" type="button" style="display:none">New analysis</button>
+                <a href="resume-analyzer.html" class="btn btn-primary" style="text-decoration:none">Open Resume Analyzer</a>
               </div>
-              <p class="muted" id="raFileName"
-                style="font-size:0.78rem;margin-top:8px;display:none;word-break:break-all"></p>
             </article>
 
             <!-- recommended for you -->
@@ -389,7 +322,7 @@
               </div>
               <div id="recommendedList" style="display:flex;flex-direction:column;gap:10px;margin-top:6px"></div>
               <div class="card-foot" id="recommendedFoot" style="display:none">
-                <a href="internshipdetails.html" class="btn btn-ghost" style="text-decoration:none">Browse all internships</a>
+                <a href="internship.html" class="btn btn-ghost" style="text-decoration:none">Browse all internships</a>
               </div>
             </article>
 
@@ -1043,7 +976,6 @@
   <script type="module" src="js/dashboard.js"></script>
   <script type="module" src="js/ai-search.js"></script>
   <script type="module" src="js/student-activity.js"></script>
-  <script type="module" src="js/resume-analyzer.js"></script>
   <script type="module" src="js/recommended.js"></script>
   <script type="module" src="js/tars.js"></script>
   <script src="js/tars-resize.js" defer></script>

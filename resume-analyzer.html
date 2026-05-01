@@ -381,6 +381,9 @@
           <div id="raDetailsBody" style="margin-top:10px;font-size:0.88rem;line-height:1.6"></div>
         </details>
 
+        <!-- strong-fit roles -->
+        <div id="raStrongFit" style="display:none;margin-top:16px"></div>
+
         <!-- past uploads (history) -->
         <div id="raHistoryPanel" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid color-mix(in srgb,var(--text) 10%,transparent)">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -444,13 +447,24 @@
       const lbl = btn?.querySelector(".toggle-label");
       function applyTheme(t) {
         const h = document.documentElement;
+        const b = document.body;
         h.classList.remove("dark","light","theme-dark","theme-light");
-        if (t === "light") { h.classList.add("theme-light","light"); h.style.colorScheme="light"; if(ico) ico.textContent="☀️"; if(lbl) lbl.textContent="Light"; }
-        else { h.classList.add("theme-dark","dark"); h.style.colorScheme="dark"; if(ico) ico.textContent="🌙"; if(lbl) lbl.textContent="Dark"; }
+        b.classList.remove("dark","light","theme-dark","theme-light");
+        if (t === "light") {
+          h.classList.add("theme-light","light");
+          b.classList.add("theme-light","light");
+          h.style.colorScheme = "light";
+          if (ico) ico.textContent = "☀️"; if (lbl) lbl.textContent = "Light";
+        } else {
+          h.classList.add("theme-dark","dark");
+          b.classList.add("theme-dark","dark");
+          h.style.colorScheme = "dark";
+          if (ico) ico.textContent = "🌙"; if (lbl) lbl.textContent = "Dark";
+        }
         localStorage.setItem("theme", t);
       }
       applyTheme(localStorage.getItem("theme") || "dark");
-      btn?.addEventListener("click", () => applyTheme(document.documentElement.classList.contains("light") ? "dark" : "light"));
+      btn?.addEventListener("click", () => applyTheme(document.body.classList.contains("light") ? "dark" : "light"));
     })();
   </script>
 

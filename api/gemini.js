@@ -16,6 +16,8 @@
 //   RATE_LIMIT_WINDOW_SEC — window size in seconds (default: 60)
 //   DAILY_LIMIT_REQUESTS  — max requests per day per user (default: 80)
 
+import { createVerify } from "crypto";
+
 export const config = {
   maxDuration: 30,
 };
@@ -27,9 +29,8 @@ const DAILY_LIMIT_REQUESTS  = parseInt(process.env.DAILY_LIMIT_REQUESTS  || "80"
 
 // ---------------------------------------------------------------------------
 // Firebase token verification
-// Google's public key endpoint returns full X.509 certificates (PEM).
-// crypto.subtle.importKey("spki") requires bare SubjectPublicKeyInfo DER,
-// not the full cert — so we extract the SPKI block from the cert DER first.
+// Uses Node's built-in `createVerify` with the raw PEM cert — no manual
+// ASN.1 parsing, no crypto.subtle.importKey keyData issues.
 // ---------------------------------------------------------------------------
 
 let _cachedKeys = null;
@@ -52,47 +53,14 @@ async function getFirebasePublicKeys() {
 }
 
 function b64UrlDecode(str) {
-  const padded = str + "=".repeat((4 - (str.length % 4)) % 4);
-  return Buffer.from(padded, "base64url");
-}
-
-// Extract the SubjectPublicKeyInfo (SPKI) SEQUENCE from a full X.509 cert DER.
-// Google's /x509/ endpoint returns PEM-encoded X.509 certs, not bare public keys.
-// crypto.subtle.importKey("spki") needs bare SPKI DER, so we walk the ASN.1
-// structure to find and slice out the SPKI block.
-function extractSpkiFromCertDer(certDer) {
-  // RSA OID: 1.2.840.113549.1.1.1 encoded as DER OID bytes
-  const rsaOid = Buffer.from("2a864886f70d010101", "hex");
-  const oidIdx = certDer.indexOf(rsaOid);
-  if (oidIdx === -1) throw new Error("RSA OID not found in certificate");
-
-  // Walk backwards from the OID to find the SEQUENCE (0x30) tag
-  // that starts the subjectPublicKeyInfo block
-  let seqStart = oidIdx - 1;
-  while (seqStart >= 0 && certDer[seqStart] !== 0x30) seqStart--;
-  if (seqStart < 0) throw new Error("SPKI SEQUENCE not found in certificate");
-
-  // Parse the ASN.1 length at seqStart+1 to get the full SPKI block length
-  let pos = seqStart + 1;
-  let len;
-  if (certDer[pos] & 0x80) {
-    const numLenBytes = certDer[pos] & 0x7f;
-    len = 0;
-    for (let i = 0; i < numLenBytes; i++) {
-      pos++;
-      len = (len << 8) | certDer[pos];
-    }
-    pos++;
-  } else {
-    len = certDer[pos];
-    pos++;
-  }
-
-  return certDer.slice(seqStart, pos + len);
+  // Convert base64url to base64, then decode
+  const base64 = str.replace(/-/g, "+").replace(/_/g, "/");
+  const padded  = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  return Buffer.from(padded, "base64");
 }
 
 async function verifyFirebaseToken(idToken) {
-  const projectId = process.env.FIREBASE_PROJECT_ID?.trim();
+  const projectId = (process.env.FIREBASE_PROJECT_ID || "").trim();
   if (!projectId) throw new Error("FIREBASE_PROJECT_ID not configured");
 
   const parts = idToken.split(".");
@@ -100,14 +68,17 @@ async function verifyFirebaseToken(idToken) {
 
   const [headerB64, payloadB64, sigB64] = parts;
 
-  const header  = JSON.parse(Buffer.from(headerB64,  "base64url").toString("utf8"));
-  const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
+  const header  = JSON.parse(b64UrlDecode(headerB64).toString("utf8"));
+  const payload = JSON.parse(b64UrlDecode(payloadB64).toString("utf8"));
 
   const now = Math.floor(Date.now() / 1000);
 
-  if (!payload.exp || payload.exp < now)        throw new Error("Token expired");
-  if (!payload.iat || now - payload.iat > 3600) throw new Error("Token too old");
-  if (payload.aud !== projectId)                throw new Error(`Token audience mismatch: got "${payload.aud}", expected "${projectId}"`);
+  if (!payload.exp || payload.exp < now)
+    throw new Error("Token expired");
+  if (!payload.iat || now - payload.iat > 3600)
+    throw new Error("Token too old");
+  if (payload.aud !== projectId)
+    throw new Error(`Token audience mismatch: got "${payload.aud}", expected "${projectId}"`);
   if (payload.iss !== `https://securetoken.google.com/${projectId}`)
     throw new Error(`Token issuer mismatch: got "${payload.iss}"`);
 
@@ -115,31 +86,15 @@ async function verifyFirebaseToken(idToken) {
   const certPem = keys[header.kid];
   if (!certPem) throw new Error(`Unknown token key ID: ${header.kid}`);
 
-  // Decode the full X.509 cert from PEM
-  const pemBody = certPem.replace(/-----[^-]+-----/g, "").replace(/\s/g, "");
-  const certDer = Buffer.from(pemBody, "base64");
+  // Use Node's crypto.createVerify directly with the PEM cert —
+  // no need to extract SPKI manually, no crypto.subtle involved.
+  const signingInput = `${headerB64}.${payloadB64}`;
+  const signature    = b64UrlDecode(sigB64);
 
-  // Extract just the SPKI block that crypto.subtle.importKey("spki") expects
-  const spkiDer = extractSpkiFromCertDer(certDer);
+  const verifier = createVerify("RSA-SHA256");
+  verifier.update(signingInput);
 
-  const cryptoKey = await crypto.subtle.importKey(
-    "spki",
-    spkiDer,
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["verify"]
-  );
-
-  const signingInput = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
-  const signature    = Buffer.from(sigB64, "base64url");
-
-  const valid = await crypto.subtle.verify(
-    "RSASSA-PKCS1-v1_5",
-    cryptoKey,
-    signature,
-    signingInput
-  );
-
+  const valid = verifier.verify(certPem, signature);
   if (!valid) throw new Error("Token signature invalid");
 
   return { uid: payload.sub, email: payload.email || null };

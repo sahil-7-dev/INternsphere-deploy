@@ -735,7 +735,7 @@ function init() {
   async function handlePdfFile(f) {
     if (!f) return;
     if (!/pdf/i.test(f.type) && !/\.pdf$/i.test(f.name)) { showError("Please upload a PDF file."); return; }
-    if (f.size > 10 * 1024 * 1024) { showError("PDF is too large. Keep it under 10 MB."); return; }
+    if (f.size > 3 * 1024 * 1024) { showError("PDF is too large. Keep it under 3 MB."); return; }
     try { await runAnalysis(await readAsDataURL(f), f.name); }
     catch { showError("Could not read the PDF. Try a different file."); }
   }

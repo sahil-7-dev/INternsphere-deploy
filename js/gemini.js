@@ -265,6 +265,7 @@ export function friendlyGeminiError(e) {
   if (s === 400) return "TARS couldn't process that. Try rephrasing.";
   if (s === 401 || s === 403)
     return "AI access is temporarily unavailable. Please try again later.";
+  if (s === 413) return "That file is too large for the AI proxy. Try a PDF under 3 MB.";
   if (s === 429) return "Too many requests — give it a minute and try again.";
   if (s >= 500) return "AI service is having issues. Try again shortly.";
 

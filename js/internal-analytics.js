@@ -1660,6 +1660,7 @@ function installHalloweenToggle() {
     btn.classList.toggle("is-off", !on);
     btn.title = on ? "Halloween mode — click to switch to normal" : "Normal mode — click to switch to Halloween";
     document.body.classList.toggle("halloween-mode-off", !on);
+    document.body.classList.toggle("halloween-on", on);
     if (!on) {
       // Remove any active vignette so the page snaps back to normal.
       document.getElementById("ghostHorrorOverlay")?.classList.remove("is-active");

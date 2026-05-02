@@ -100,6 +100,114 @@ const ZOMBIE_BUBBLES = [
   "share the meat",
 ];
 
+// ── Click-only quote pools (only fired when the user actually clicks the sprite) ──
+// Each cast member responds at most once per appearance. Scarecrow is the
+// exception — it has its own 2-minute cooldown handled in the dashboard
+// inline script.
+const MUMMY_CLICK_QUOTES = [
+  "3000 years for this?",
+  "i was someone, once.",
+  "the curse is mostly emotional.",
+  "needs more bandages.",
+  "i'd run, but… joints.",
+  "wrap it up, kid.",
+  "is this a tomb or a startup?",
+];
+
+const GUITARIST_CLICK_QUOTES = [
+  "rock and bone!",
+  "this riff slaps.",
+  "encore!",
+  "bone-y jovi.",
+  "🤘",
+  "i'm in B-flat. always.",
+  "shred mode: ON.",
+];
+
+const DANCER_CLICK_QUOTES = [
+  "spooky scary!",
+  "rattle rattle.",
+  "bone to be wild.",
+  "shake those bones.",
+  "no rest for the funky.",
+  "left foot, no foot.",
+  "clap if you got ribs.",
+  "come dance with me.",
+];
+
+const SKELETON_CLICK_QUOTES = [
+  "really? trying to pause me huh",
+  "please save me",
+  "make him go away",
+  "i am scared, can't stop",
+  "nice try",
+];
+
+// Zombie click quotes — one entry is a two-part: the line "bones or flesh?"
+// pauses for ~1.1s and then says the follow-up.
+const ZOMBIE_CLICK_QUOTES = [
+  { text: "humans hand's yummmm" },
+  { text: "don't poke me." },
+  { text: "warm finger…" },
+  { text: "hands. yum." },
+  { text: "5-second rule on hands?" },
+  { text: "bones or flesh?", followUp: "both are fine, yum yum…", followUpDelay: 1100 },
+];
+
+// ── Click-quote helpers — wires a sprite so a single click during its
+// appearance pops a speech bubble above it. After speaking once the sprite
+// stops responding for the rest of its lifetime; next time the same kind
+// of cast member appears, the new instance is fresh again. ──
+function showCastQuote(spriteEl, text, holdMs) {
+  if (!spriteEl || !text) return;
+  const bubble = document.createElement("span");
+  bubble.className = "cast-quote";
+  bubble.textContent = text;
+  bubble.style.animationDuration = (holdMs || 2500) + "ms";
+  bubble.addEventListener("animationend", () => bubble.remove());
+  spriteEl.appendChild(bubble);
+}
+
+// Shuffled-queue picker per pool — guarantees every quote is heard before
+// any repeats. Each call to wireSpriteClick(pool, …) on the same pool
+// shares the same queue at module level via _quoteQueues, so consecutive
+// sprite spawns don't keep landing on the same line.
+const _quoteQueues = new WeakMap();
+function pickFromPool(pool) {
+  let queue = _quoteQueues.get(pool);
+  if (!queue || queue.length === 0) {
+    queue = pool.slice();
+    for (let i = queue.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = queue[i]; queue[i] = queue[j]; queue[j] = t;
+    }
+    _quoteQueues.set(pool, queue);
+  }
+  return queue.shift();
+}
+
+function wireSpriteClick(spriteEl, pool) {
+  if (!spriteEl || !Array.isArray(pool) || !pool.length) return;
+  spriteEl.classList.add("is-clickable");
+  let spoken = false;
+  spriteEl.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (spoken) return;
+    spoken = true;
+    const entry = pickFromPool(pool);
+    if (typeof entry === "string") {
+      showCastQuote(spriteEl, entry, 3125);
+    } else if (entry && entry.text) {
+      showCastQuote(spriteEl, entry.text, entry.followUp ? 1250 : 3125);
+      if (entry.followUp) {
+        setTimeout(() => {
+          showCastQuote(spriteEl, entry.followUp, 3125);
+        }, entry.followUpDelay || 1100);
+      }
+    }
+  });
+}
+
 // Inline SVG fallback when the CDN is unreachable. Stylised witch on a broom.
 const WITCH_ICON_FALLBACK =
   "data:image/svg+xml;utf8," +
@@ -173,11 +281,14 @@ const GREETING_AUTO_DISMISS_MS = 20000;
 function installGreetingModal() {
   document.body.classList.add("is-ghost");
 
-  // Once per session — refreshing doesn't replay it.
+  // Once per session — refreshing doesn't replay it. When the modal won't
+  // be shown, return an already-resolved promise so the welcome burst fires
+  // immediately on subsequent navigations.
   let shown = false;
   try { shown = sessionStorage.getItem(GREETING_SHOWN_KEY) === "1"; } catch {}
-  if (shown) return;
+  if (shown) return Promise.resolve();
 
+  return new Promise((resolveClosed) => {
   setTimeout(() => {
     if (document.getElementById("ghostGreetingModal")) return;
     try { sessionStorage.setItem(GREETING_SHOWN_KEY, "1"); } catch {}
@@ -222,6 +333,8 @@ function installGreetingModal() {
       dismissed = true;
       backdrop.classList.add("is-closing");
       setTimeout(() => backdrop.remove(), 220);
+      // Signal the welcome burst to start now that the modal is gone.
+      resolveClosed();
     };
 
     backdrop.querySelector(".ghost-modal__close")?.addEventListener("click", close);
@@ -247,6 +360,7 @@ function installGreetingModal() {
 
     requestAnimationFrame(() => backdrop.classList.add("is-open"));
   }, GREETING_DELAY_MS);
+  });
 }
 
 // ─── Cinematic intro (student-only, one-shot per session) ───
@@ -872,11 +986,11 @@ function spawnWitch() {
     ? 0                                          // vertical paths anchor at viewport top; keyframes handle Y
     : 38 + Math.random() * 12;                   // 38–50% middle band
 
-  // Leader — anchor of the squadron.
+  // Leader — anchor of the squadron. (+50% over previous 170–200)
   spawnSingleWitch({
     src: WITCH_LEADER_URL,
     top: baseTop,
-    size: 170 + Math.random() * 30,
+    size: 255 + Math.random() * 45,
     duration: dur,
     delay: 0,
     bob: 30 + Math.random() * 12,
@@ -887,35 +1001,33 @@ function spawnWitch() {
     enableSparkTrail,
   });
 
-  // Follower 1 — well behind. For horizontal paths, clearly above the
-  // leader's line. For vertical paths, well to the LEFT column.
+  // Follower 1 — well behind. (+50% over previous 130–155)
   spawnSingleWitch({
     src: WITCH_FOLLOWER_URLS[0],
-    top: isVertical ? baseTop : Math.max(2, baseTop - 5 - Math.random() * 2),    // ~5–7% above (was 2–3.5)
-    size: 130 + Math.random() * 25,
+    top: isVertical ? baseTop : Math.max(2, baseTop - 5 - Math.random() * 2),
+    size: 195 + Math.random() * 38,
     duration: dur,
-    delay: 0.9 + Math.random() * 0.5,                                            // ~0.9–1.4s (was 0.55–0.9)
+    delay: 0.9 + Math.random() * 0.5,
     bob: 26 + Math.random() * 12,
     leader: false,
     swingCw: !isVertical && swingCw,
     pathClass,
-    witchX: isVertical ? -7 - Math.random() * 2 : undefined,                     // ~-7 to -9vw (was -4 to -5.5)
+    witchX: isVertical ? -7 - Math.random() * 2 : undefined,
     enableSparkTrail,
   });
 
-  // Follower 2 — even further behind. Below leader (horizontal) or to
-  // the RIGHT column (vertical).
+  // Follower 2 — even further behind. (+50% over previous 130–155)
   spawnSingleWitch({
     src: WITCH_FOLLOWER_URLS[1],
-    top: isVertical ? baseTop : Math.min(46, baseTop + 5 + Math.random() * 2),   // ~5–7% below
-    size: 130 + Math.random() * 25,
+    top: isVertical ? baseTop : Math.min(46, baseTop + 5 + Math.random() * 2),
+    size: 195 + Math.random() * 38,
     duration: dur,
-    delay: 1.7 + Math.random() * 0.5,                                            // ~1.7–2.2s (was 1.05–1.4)
+    delay: 1.7 + Math.random() * 0.5,
     bob: 26 + Math.random() * 12,
     leader: false,
     swingCw: !isVertical && swingCw,
     pathClass,
-    witchX: isVertical ? 7 + Math.random() * 2 : undefined,                      // ~+7 to +9vw
+    witchX: isVertical ? 7 + Math.random() * 2 : undefined,
     enableSparkTrail,
   });
 
@@ -1029,15 +1141,16 @@ function spawnBatsAroundWitches(baseTop, isVertical) {
 // then fade as they travel off-screen. Visual narrative: spark = summon.
 function spawnBatBurstFromPoint(landingX) {
   if (document.hidden || !isHalloweenEnabled()) return;
-  const count = 6 + Math.floor(Math.random() * 5);   // 6–10 bats
+  const count = 14 + Math.floor(Math.random() * 6);   // 14–19 bats (was 6–10)
   for (let i = 0; i < count; i++) {
     const wrap = document.createElement("div");
     wrap.className = "bat-burst";
     wrap.setAttribute("aria-hidden", "true");
 
     // Fan upward and outward. End offsets are relative to the landing
-    // point (which we anchor with left + bottom 0).
-    const endX = (Math.random() - 0.5) * 1600;             // -800 to +800px lateral
+    // point (which we anchor with left + bottom 0). Wider lateral spread
+    // so the eruption covers the dashboard, not just one side.
+    const endX = (Math.random() - 0.5) * 2400;             // -1200 to +1200px lateral
     const endY = -(420 + Math.random() * 680);             // -420 to -1100px upward
     const dur  = 4 + Math.random() * 3;                    // 4–7s
     const size = 60 + Math.random() * 50;                  // 60–110px
@@ -1069,6 +1182,22 @@ function spawnBatBurstFromPoint(landingX) {
     });
     document.body.appendChild(wrap);
   }
+
+  // Alongside the ground-fan, scatter a free-flight flock across the whole
+  // viewport so the bats aren't visually clumped at the spark's landing
+  // point — they should blanket the dashboard.
+  spawnBatFlock(7 + Math.floor(Math.random() * 4));   // 7–10 extra wide-distributed bats
+
+  // Rare crossover: ~1 in 5 witch bursts pulls another cast member in for a
+  // brief multi-character moment. Fires after a short beat so it reads as
+  // "the ruckus drew them out", not as part of the same explosion.
+  if (Math.random() < 0.2) {
+    const ALLIES = ["chase", "band"];
+    const allyId = pick(ALLIES);
+    const ally   = SCENE_CAST.find(c => c.id === allyId);
+    if (ally) setTimeout(() => _fireScene(ally), 700);
+  }
+
   pushScene(7000);
 }
 
@@ -1076,7 +1205,7 @@ function spawnBatBurstFromPoint(landingX) {
 // flybys without competing with the burst moment as the bats' main beat.
 function scheduleBatFlock() {
   function next() {
-    const delay = (3 * 60 * 1000) + Math.random() * (60 * 1000);   // 3–4 min
+    const delay = (1.5 * 60 * 1000) + Math.random() * (30 * 1000);   // 1.5–2 min
     setTimeout(() => {
       if (!document.hidden && isHalloweenEnabled()) {
         spawnBatFlock(1 + Math.floor(Math.random() * 2));   // 1–2 stray bats
@@ -1085,14 +1214,14 @@ function scheduleBatFlock() {
       next();
     }, delay);
   }
-  // First flock ~25s after mount.
+  // First flock ~30–45s after mount.
   setTimeout(() => {
     if (!document.hidden && isHalloweenEnabled()) {
       spawnBatFlock(1 + Math.floor(Math.random() * 2));
       pushScene(5000);
     }
     next();
-  }, 60000 + Math.random() * 30000);   // first stray bat 60–90s after mount
+  }, 30000 + Math.random() * 15000);   // first stray bat 30–45s after mount
 }
 
 // ─── Running skeleton chased by a zombie ───
@@ -1156,6 +1285,7 @@ function spawnSkeletonChase() {
       if (e.target === wrap) wrap.remove();
     });
     document.body.appendChild(wrap);
+    return wrap;
   }
 
   // Skeleton cries out 2–3s into the chase, after he's clearly running.
@@ -1169,7 +1299,7 @@ function spawnSkeletonChase() {
 
   // Skeleton (lead, panicking). Use jumping keyframes when there's a grave
   // to vault — class targets `.chase-skeleton.chase--with-obstacle.chase--ltr`.
-  entity(RUNNING_SKELETON_URL, "chase-skeleton", {
+  const skeletonWrap = entity(RUNNING_SKELETON_URL, "chase-skeleton", {
     bottom: baseBottom,
     size: 220 + Math.random() * 50,           // 220–270px
     delay: 0,
@@ -1179,10 +1309,12 @@ function spawnSkeletonChase() {
     bubbleDelay: skeletonBubbleAt,
     extraClass: hasGraveObstacle ? "chase--with-obstacle" : null,
   });
+  wireSpriteClick(skeletonWrap, SKELETON_CLICK_QUOTES);
+
   // Zombie (slightly behind and slightly larger for menace). Doesn't jump
   // — he just plows through the grave even when one is present. Same
   // baseBottom as the skeleton so the two stay on a single straight line.
-  entity(ZOMBIE_URL, "chase-zombie", {
+  const zombieWrap = entity(ZOMBIE_URL, "chase-zombie", {
     bottom: baseBottom,
     size: 240 + Math.random() * 50,           // 240–290px
     delay: zombieSpawnGap,
@@ -1191,6 +1323,7 @@ function spawnSkeletonChase() {
     bubbleVariant: "zombie",
     bubbleDelay: zombieBubbleAt,
   });
+  wireSpriteClick(zombieWrap, ZOMBIE_CLICK_QUOTES);
 
   // Grave obstacle: lock the spawn to the skeleton's jump moment in
   // wallclock, not to a percentage of dur. The grave webm has a fixed
@@ -1249,8 +1382,17 @@ function spawnSkeletonBand() {
     return v;
   }
 
-  const guitar  = makeVideo(GUITAR_SKELETON_URL,  "skeleton-band__guitar");
-  const dancer  = makeVideo(DANCING_SKELETON_URL, "skeleton-band__dancer");
+  function wrapBandMember(video) {
+    const span = document.createElement("span");
+    span.className = "skeleton-band__slot";
+    span.appendChild(video);
+    return span;
+  }
+
+  const guitar     = makeVideo(GUITAR_SKELETON_URL,  "skeleton-band__guitar");
+  const dancer     = makeVideo(DANCING_SKELETON_URL, "skeleton-band__dancer");
+  const guitarSlot = wrapBandMember(guitar);
+  const dancerSlot = wrapBandMember(dancer);
 
   // Order in the DOM = visual left-to-right. We always want the dancer on
   // the OUTER side and the guitarist on the INNER side, so the pair faces
@@ -1260,15 +1402,19 @@ function spawnSkeletonBand() {
   if (isRight) {
     // Band at bottom-right: dancer on LEFT of guitarist → flip to face right.
     dancer.classList.add("skeleton-band__dancer--flip");
-    wrap.appendChild(dancer);
-    wrap.appendChild(guitar);
+    wrap.appendChild(dancerSlot);
+    wrap.appendChild(guitarSlot);
   } else {
     // Band at bottom-left: dancer on RIGHT of guitarist → natural facing.
-    wrap.appendChild(guitar);
-    wrap.appendChild(dancer);
+    wrap.appendChild(guitarSlot);
+    wrap.appendChild(dancerSlot);
   }
 
   document.body.appendChild(wrap);
+
+  // Each band member responds to one click during this appearance.
+  wireSpriteClick(guitarSlot, GUITARIST_CLICK_QUOTES);
+  wireSpriteClick(dancerSlot, DANCER_CLICK_QUOTES);
 
   // Start the riff the instant the band appears — no delay.
   startGuitaristRiff();
@@ -1310,6 +1456,7 @@ function spawnEgyptMummy() {
     if (e.target === wrap) wrap.remove();
   });
   document.body.appendChild(wrap);
+  wireSpriteClick(wrap, MUMMY_CLICK_QUOTES);
 }
 
 // ─── Grave obstacle (single-play, mid-chase) ───
@@ -1369,8 +1516,8 @@ function isHalloweenEnabled() {
 const SCENE_CAST = [
   {
     id: "chase",
-    cooldownMin: 5 * 60 * 1000,
-    cooldownMax: 7 * 60 * 1000,
+    cooldownMin: 2.5 * 60 * 1000,
+    cooldownMax: 3.5 * 60 * 1000,
     fire() {
       const dur = spawnSkeletonChase();
       pushScene(Math.min(13000, Math.ceil(dur * 1000)));
@@ -1378,8 +1525,8 @@ const SCENE_CAST = [
   },
   {
     id: "witch",
-    cooldownMin: 4 * 60 * 1000,
-    cooldownMax: 6 * 60 * 1000,
+    cooldownMin: 2 * 60 * 1000,
+    cooldownMax: 3 * 60 * 1000,
     fire() {
       const dur = spawnWitch();
       pushScene(Math.min(16000, Math.ceil(dur * 1000)));
@@ -1390,8 +1537,8 @@ const SCENE_CAST = [
   },
   {
     id: "mummy",
-    cooldownMin: 7 * 60 * 1000,
-    cooldownMax: 8 * 60 * 1000,
+    cooldownMin: 3.5 * 60 * 1000,
+    cooldownMax: 4 * 60 * 1000,
     fire() {
       spawnEgyptMummy();
       pushScene(12000);
@@ -1399,8 +1546,8 @@ const SCENE_CAST = [
   },
   {
     id: "band",
-    cooldownMin: 8 * 60 * 1000,
-    cooldownMax: 9 * 60 * 1000,
+    cooldownMin: 4 * 60 * 1000,
+    cooldownMax: 4.5 * 60 * 1000,
     fire() {
       spawnSkeletonBand();
       pushScene(9000);
@@ -1408,16 +1555,17 @@ const SCENE_CAST = [
   },
 ];
 
-// First 90s seeds variety so a brand-new user sees several cast members
-// before the slower steady-state cadence kicks in. Mummy is held back so
-// the welcome window doesn't dump the entire cast at once.
+// First witch flyby fires 40s after the welcome modal closes — gives the
+// user a calm window before the cinematic ramp-up — then the rest of the
+// burst follows. Mummy is held back so the welcome window doesn't dump
+// the entire cast at once.
 const SCENE_WELCOME_BURST = [
-  { id: "witch", at:  8000 },
-  { id: "chase", at: 50000 },
-  { id: "band",  at: 110000 },
+  { id: "witch", at: 40000 },
+  { id: "chase", at: 61000 },
+  { id: "band",  at: 91000 },
 ];
 
-const SCENE_TICK_MS = 30000;
+const SCENE_TICK_MS = 15000;
 const _sceneLastFireAt = new Map();
 let _sceneLastFiredId  = null;
 
@@ -1453,44 +1601,46 @@ function _fireScene(cast) {
   _sceneLastFiredId = cast.id;
 }
 
-function startSceneRotator() {
-  // Pre-record the welcome burst's scheduled fire times in
-  // _sceneLastFireAt so an early steady-state tick can't pick a cast
-  // member that's about to fire from the burst (otherwise the rotator
-  // would queue, say, chase at t=30s and the burst would fire chase
-  // again at t=50s — back-to-back repeat). The future timestamps make
-  // `now - last < 0 < cooldownMin`, so eligibility correctly fails.
-  const startedAt = Date.now();
-  SCENE_WELCOME_BURST.forEach(({ id, at }) => {
-    _sceneLastFireAt.set(id, startedAt + at);
-  });
+function startSceneRotator(greetingClosedPromise = Promise.resolve()) {
+  // Wait for the greeting modal to close before kicking off the welcome
+  // burst — the first burst should fire AFTER the modal auto-dismisses
+  // (or the user closes it), not while it's still on screen.
+  greetingClosedPromise.then(() => {
+    // Pre-record the welcome burst's scheduled fire times in
+    // _sceneLastFireAt so an early steady-state tick can't pick a cast
+    // member that's about to fire from the burst.
+    const startedAt = Date.now();
+    SCENE_WELCOME_BURST.forEach(({ id, at }) => {
+      _sceneLastFireAt.set(id, startedAt + at);
+    });
 
-  // Welcome burst — overrides cooldowns to seed variety quickly.
-  SCENE_WELCOME_BURST.forEach(({ id, at }) => {
-    setTimeout(() => {
-      const cast = SCENE_CAST.find(c => c.id === id);
-      if (cast) _fireScene(cast);
-    }, at);
-  });
+    // Welcome burst — overrides cooldowns to seed variety quickly.
+    SCENE_WELCOME_BURST.forEach(({ id, at }) => {
+      setTimeout(() => {
+        const cast = SCENE_CAST.find(c => c.id === id);
+        if (cast) _fireScene(cast);
+      }, at);
+    });
 
-  // Steady-state tick. Each wake-up considers eligible cast members and
-  // picks one weighted by overdue-ness. Skips silently when nothing has
-  // cooled down yet, when the tab is hidden, or when halloween is off.
-  setInterval(() => {
-    const next = _pickNextScene(Date.now());
-    if (next) _fireScene(next);
-  }, SCENE_TICK_MS);
+    // Steady-state tick. Each wake-up considers eligible cast members and
+    // picks one weighted by overdue-ness. Skips silently when nothing has
+    // cooled down yet, when the tab is hidden, or when halloween is off.
+    setInterval(() => {
+      const next = _pickNextScene(Date.now());
+      if (next) _fireScene(next);
+    }, SCENE_TICK_MS);
+  });
 }
 
-function scheduleGhostFlybys() {
+function scheduleGhostFlybys(greetingClosedPromise) {
   try {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   } catch {}
 
   prepareAudio();
   installHalloweenToggle();
-  scheduleBatFlock();      // ambient texture — runs independently of the rotator
-  startSceneRotator();     // chase / witch / mummy / band — coordinated
+  scheduleBatFlock();                            // ambient texture — runs independently of the rotator
+  startSceneRotator(greetingClosedPromise);      // chase / witch / mummy / band — coordinated; waits for modal close
 }
 
 // Floating dev-only toggle. Halloween / Normal. Persists to localStorage.
@@ -2226,16 +2376,16 @@ function ensureStyles() {
       position: absolute;
       bottom: calc(100% + 12px);
       left: 50%;
-      padding: 6px 14px;
+      padding: 7px 16px;
       border-radius: 16px;
-      font: 800 14px/1.2 "Inter", system-ui, sans-serif;
+      font: 800 16px/1.2 "Inter", system-ui, sans-serif;
       letter-spacing: 0.2px;
       white-space: nowrap;
       box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
       pointer-events: none;
       z-index: 1;
       opacity: 0;
-      animation: bubbleLife 3s ease-out forwards;
+      animation: bubbleLife 3.75s ease-out forwards;
     }
     .chase-bubble::after {
       content: "";
@@ -2282,6 +2432,66 @@ function ensureStyles() {
       18%  { opacity: 1; transform: translateX(-50%) scaleX(-1) translateY(0); }
       70%  { opacity: 1; transform: translateX(-50%) scaleX(-1) translateY(-2px); }
       100% { opacity: 0; transform: translateX(-50%) scaleX(-1) translateY(-14px); }
+    }
+
+    /* ── Click-to-speak: applied to whichever wrap a click handler uses ── */
+    .is-clickable {
+      pointer-events: auto;
+      cursor: pointer;
+    }
+    /* Right-to-left chase wraps are mirrored via scaleX(-1) on the wrap;
+       cancel that on the bubble so text reads normally. */
+    .chase--rtl .cast-quote { transform: translateX(-50%) scaleX(-1); }
+    .cast-quote {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 7px 14px;
+      background: rgba(26, 26, 46, 0.96);
+      color: #f1f5f9;
+      border-radius: 12px;
+      border: 1px solid rgba(124, 107, 255, 0.5);
+      font-size: 16px;
+      font-weight: 700;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 10000;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+      opacity: 0;
+      animation: castQuotePop 3125ms ease-out forwards;
+    }
+    .cast-quote::after {
+      content: "";
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      margin-left: -6px;
+      border: 6px solid transparent;
+      border-top-color: rgba(26, 26, 46, 0.96);
+    }
+    @keyframes castQuotePop {
+      0%   { opacity: 0; transform: translateX(-50%) translateY(8px)  scale(0.85); }
+      14%  { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1); }
+      82%  { opacity: 1; transform: translateX(-50%) translateY(-2px) scale(1); }
+      100% { opacity: 0; transform: translateX(-50%) translateY(-12px) scale(0.96); }
+    }
+    /* Light-theme polish for cast + chase bubbles — the dark navy bg
+       already reads on light backgrounds but a stronger border + heavier
+       shadow keeps them visually anchored on a white viewport. */
+    body.theme-light .cast-quote,
+    body.theme-light .chase-bubble {
+      border-color: rgba(15, 23, 42, 0.55);
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.28);
+    }
+
+    /* Band-member slots wrap each video so the click bubble has a
+       same-size positioned anchor and doesn't try to anchor inside a
+       <video> element. */
+    .skeleton-band__slot {
+      position: relative;
+      display: inline-block;
+      line-height: 0;
     }
 
     /* Skeleton band — guitarist + dancer in a bottom corner. They share
@@ -2793,8 +3003,8 @@ function init() {
     wireDevLogout();
     // Intro first — blocks until the cinematic finishes (or is skipped).
     await playGhostIntro();
-    installGreetingModal();
-    scheduleGhostFlybys();
+    const greetingClosed = installGreetingModal();
+    scheduleGhostFlybys(greetingClosed);
   };
   if (document.body) mount();
   else document.addEventListener("DOMContentLoaded", mount);

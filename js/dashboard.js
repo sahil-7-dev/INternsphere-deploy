@@ -723,6 +723,9 @@ async function injectUserIntoUI(user) {
     if (profileName) profileName.textContent = name;
     if (profileMeta) profileMeta.textContent = `${roleLabel} • ${ats}% ATS`;
 
+    const tarsAtsEl = document.getElementById("tarsAtsScore");
+    if (tarsAtsEl) tarsAtsEl.textContent = `${ats}%`;
+
     const currentUser = { name, roleLabel, email: user.email || "" };
     localStorage.setItem("currentUser", JSON.stringify(currentUser));
 

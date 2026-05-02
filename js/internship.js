@@ -111,15 +111,15 @@ function repaintStatsHeader(visibleJobs) {
 }
 
 const DYNAMIC_IMAGES = [
-  "alex-kotliarskyi-QBpZGqEMsKg-unsplash.jpg",
-  "ant-rozetsky-HXOllTSwrpM-unsplash.jpg",
-  "austin-distel-mpN7xjKQ_Ns-unsplash.jpg",
-  "austin-distel-wD1LRb9OeEo-unsplash.jpg",
-  "campaign-creators-gMsnXqILjp4-unsplash.jpg",
-  "campaign-creators-qCi_MzVODoU-unsplash.jpg",
-  "charlesdeluvio-Lks7vei-eAg-unsplash.jpg",
-  "christina-wocintechchat-com-m-faEfWCdOKIg-unsplash.jpg",
-  "mario-gogh-VBLHICVh-lI-unsplash.jpg",
+  "alex-kotliarskyi-QBpZGqEMsKg-unsplash.webp",
+  "ant-rozetsky-HXOllTSwrpM-unsplash.webp",
+  "austin-distel-mpN7xjKQ_Ns-unsplash.webp",
+  "austin-distel-wD1LRb9OeEo-unsplash.webp",
+  "campaign-creators-gMsnXqILjp4-unsplash.webp",
+  "campaign-creators-qCi_MzVODoU-unsplash.webp",
+  "charlesdeluvio-Lks7vei-eAg-unsplash.webp",
+  "christina-wocintechchat-com-m-faEfWCdOKIg-unsplash.webp",
+  "mario-gogh-VBLHICVh-lI-unsplash.webp",
 ];
 
 function pickDynamicImage(seed) {

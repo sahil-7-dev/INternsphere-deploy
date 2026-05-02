@@ -858,7 +858,12 @@
       border-color: rgba(124, 107, 255, 0.3);
     }
 
-    /* ── Sidebar scarecrow — looped halloween mascot, glows on click ── */
+    /* ── Sidebar scarecrow — looped halloween mascot, glows on click ──
+       Hidden by default. Only shown when the dev-gated halloween script
+       runs and sets `body.halloween-on`. Normal users never see the
+       scarecrow because the script never loads for them. */
+    .scarecrow-sidebar { display: none; }
+    body.halloween-on .scarecrow-sidebar { display: block; }
     .scarecrow-sidebar {
       position: relative;
       margin: 18px auto 0;
@@ -933,10 +938,10 @@
       80%  { background: rgba(255, 80, 80, 0.55); box-shadow: 0 0 6px 2px rgba(239, 68, 68, 0.45); }
       100% { background: transparent;             box-shadow: none; }
     }
-    /* Halloween mode is opt-in / can be turned off via the toggle —
-       the scarecrow follows the same gate so a normal-mode user doesn't
-       see him at all. */
-    body.halloween-mode-off .scarecrow-sidebar { display: none; }
+    /* Halloween mode hide-rule is the default `display: none` above.
+       Showing happens via `body.halloween-on .scarecrow-sidebar`, which
+       is only added by the dev-gated halloween script — so normal users
+       never see the scarecrow at all. */
 
     /* Cooldown / "sleeping" mode after a click — 2-minute timeout. */
     .scarecrow-sidebar.is-sleeping {

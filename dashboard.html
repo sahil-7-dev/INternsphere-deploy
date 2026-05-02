@@ -89,7 +89,10 @@
               width="25" height="25" class="tars-logo-img"><b>TARS</b></span>
 
           <div class="tars-controls">
-            <span id="closeTars">&times;</span>
+            <span id="closeTars" role="button" tabindex="0"
+                  onclick="document.getElementById('tarsConsole')?.classList.remove('show')"
+                  onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('tarsConsole')?.classList.remove('show');}"
+                  style="cursor:pointer">&times;</span>
           </div>
         </div>
 

@@ -99,7 +99,7 @@
 
           <div class="tars-stats">
             <span id="tarsTasksPending">No task pending</span>
-            <span>Profile Score: <b id="tarsAtsScore">0%</b></span>
+            <span>ATS Score: <b id="tarsAtsScore">0%</b></span>
           </div>
 
           <!-- quick actions -->
@@ -163,6 +163,16 @@
               src="assets/images/icon-settings.png" alt="" aria-hidden="true"></span>
           Settings
         </a>
+
+        <!-- Halloween scarecrow — looped throughout the session, click for red-eye glow -->
+        <div id="scarecrowSidebar" class="scarecrow-sidebar" role="button" tabindex="0"
+             aria-label="Scarecrow — click to make him glow">
+          <video class="scarecrow-sidebar__video"
+                 src="assets/images/_cache/scarecrow%20.webm"
+                 autoplay loop muted playsinline aria-hidden="true"></video>
+          <span class="scarecrow-sidebar__eye scarecrow-sidebar__eye--left"  aria-hidden="true"></span>
+          <span class="scarecrow-sidebar__eye scarecrow-sidebar__eye--right" aria-hidden="true"></span>
+        </div>
       </nav>
     </aside>
 
@@ -573,6 +583,7 @@
       <div class="profile-banner"
         style="position:relative;padding:28px 28px 64px;background:linear-gradient(135deg,rgba(124,107,255,0.18),rgba(236,72,153,0.12))">
         <button type="button" id="closeProfileModal"
+          onclick="document.getElementById('profileModal')?.classList.remove('is-open')"
           style="position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:10px;border:1px solid rgba(148,163,184,0.28);background:rgba(148,163,184,0.15);color:inherit;cursor:pointer;font-size:18px;z-index:2">✕</button>
         <h2
           style="margin:0;font-size:1.35rem;background:linear-gradient(135deg,#7c6bff,#a855f7);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:900;letter-spacing:-0.02em">
@@ -846,6 +857,160 @@
       background: rgba(124, 107, 255, 0.1);
       border-color: rgba(124, 107, 255, 0.3);
     }
+
+    /* ── Sidebar scarecrow — looped halloween mascot, glows on click ── */
+    .scarecrow-sidebar {
+      position: relative;
+      margin: 18px auto 0;
+      width: 100%;
+      max-width: 360px;
+      aspect-ratio: 1 / 1.45;
+      cursor: pointer;
+      outline: none;
+      /* overflow: visible — the speech bubble pops UP above the figure
+         and gets clipped if we hide overflow here. The rounded-corner
+         clip moved to the video element itself. */
+      overflow: visible;
+      transition: transform 0.25s ease, filter 0.25s ease;
+      /* Promote to its own compositor layer so the looping video isn't
+         flickered by sibling repaints. */
+      transform: translateZ(0);
+      will-change: transform, filter;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      isolation: isolate;
+    }
+    .scarecrow-sidebar:hover { transform: translate3d(0, -2px, 0); }
+    .scarecrow-sidebar:focus-visible { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.45); }
+    .scarecrow-sidebar__video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      pointer-events: none;
+      background: transparent;
+      border-radius: 14px;
+      /* Same GPU hint on the video itself — keeps every frame
+         on the compositor and avoids alpha-channel flashes at the
+         loop boundary. */
+      transform: translateZ(0);
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      will-change: transform;
+    }
+    /* Two small dots positioned approximately where the scarecrow's eyes are.
+       Hidden by default; pulsed red during the click animation. */
+    .scarecrow-sidebar__eye {
+      position: absolute;
+      width: 9%;
+      height: 4%;
+      border-radius: 50%;
+      top: 26%;
+      background: transparent;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      filter: blur(1.5px);
+    }
+    .scarecrow-sidebar__eye--left  { left: 38%; }
+    .scarecrow-sidebar__eye--right { left: 53%; }
+    .scarecrow-sidebar.is-glowing .scarecrow-sidebar__eye {
+      animation: scarecrowEyeFlash 2s ease-in-out;
+    }
+    .scarecrow-sidebar.is-glowing { animation: scarecrowBodyGlow 2s ease-in-out; }
+    @keyframes scarecrowBodyGlow {
+      0%   { filter: drop-shadow(0 0 0 transparent); }
+      18%  { filter: drop-shadow(0 0 18px rgba(239, 68, 68, 0.95)) saturate(1.25); }
+      35%  { filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.45)); }
+      55%  { filter: drop-shadow(0 0 22px rgba(239, 68, 68, 0.95)) saturate(1.3); }
+      78%  { filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.55)); }
+      100% { filter: drop-shadow(0 0 0 transparent); }
+    }
+    @keyframes scarecrowEyeFlash {
+      0%   { background: transparent;             box-shadow: none; }
+      15%  { background: rgba(255, 60, 60, 1);    box-shadow: 0 0 18px 6px rgba(239, 68, 68, 0.95); }
+      30%  { background: rgba(255, 80, 80, 0.55); box-shadow: 0 0 8px 3px rgba(239, 68, 68, 0.55); }
+      55%  { background: rgba(255, 60, 60, 1);    box-shadow: 0 0 22px 8px rgba(239, 68, 68, 1); }
+      80%  { background: rgba(255, 80, 80, 0.55); box-shadow: 0 0 6px 2px rgba(239, 68, 68, 0.45); }
+      100% { background: transparent;             box-shadow: none; }
+    }
+    /* Halloween mode is opt-in / can be turned off via the toggle —
+       the scarecrow follows the same gate so a normal-mode user doesn't
+       see him at all. */
+    body.halloween-mode-off .scarecrow-sidebar { display: none; }
+
+    /* Cooldown / "sleeping" mode after a click — 2-minute timeout. */
+    .scarecrow-sidebar.is-sleeping {
+      cursor: default;
+      filter: brightness(0.65) saturate(0.6);
+    }
+    .scarecrow-sidebar.is-sleeping:hover { transform: none; }
+    .scarecrow-sidebar.is-sleeping::before {
+      content: "💤";
+      position: absolute;
+      top: 8%;
+      right: 14%;
+      font-size: 28px;
+      pointer-events: none;
+      opacity: 0;
+      animation: scarecrowSnore 2.6s ease-in-out infinite;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+    }
+    @keyframes scarecrowSnore {
+      0%   { opacity: 0;    transform: translateY(0)    scale(0.75); }
+      25%  { opacity: 0.92; transform: translateY(-6px) scale(0.95); }
+      55%  { opacity: 0.92; transform: translateY(-14px) scale(1.05); }
+      100% { opacity: 0;    transform: translateY(-22px) scale(1.15); }
+    }
+
+    /* Speech bubble for the scarecrow's click quote — same shape as the
+       cast quotes so it matches the rest of the halloween theme. */
+    .scarecrow-quote {
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 6px);
+      transform: translateX(-50%);
+      padding: 7px 14px;
+      background: rgba(26, 26, 46, 0.96);
+      color: #f1f5f9;
+      border-radius: 12px;
+      border: 1px solid rgba(124, 107, 255, 0.5);
+      font-size: 15px;
+      font-weight: 700;
+      max-width: 280px;
+      text-align: center;
+      pointer-events: none;
+      z-index: 10000;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+      opacity: 0;
+      animation: scarecrowQuotePop 3250ms ease-out forwards;
+    }
+    .scarecrow-quote::after {
+      content: "";
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      margin-left: -6px;
+      border: 6px solid transparent;
+      border-top-color: rgba(26, 26, 46, 0.96);
+    }
+    @keyframes scarecrowQuotePop {
+      0%   { opacity: 0; transform: translateX(-50%) translateY(8px)  scale(0.88); }
+      14%  { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1); }
+      85%  { opacity: 1; transform: translateX(-50%) translateY(-2px) scale(1); }
+      100% { opacity: 0; transform: translateX(-50%) translateY(-12px) scale(0.96); }
+    }
+
+    /* Light-theme polish — bubbles are already dark navy with white text
+       (so they read on any background) but on a white sidebar they need
+       a heavier shadow + stronger border to feel anchored instead of
+       blending into the page. */
+    body.theme-light .scarecrow-quote {
+      border-color: rgba(15, 23, 42, 0.55);
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.30);
+    }
+    body.theme-light .scarecrow-quote::after {
+      border-top-color: rgba(26, 26, 46, 0.96);
+    }
   </style>
 
   <!-- tars -->
@@ -980,6 +1145,109 @@
   <script src="js/sounds.js"></script>
   <script src="js/offer-letter.js"></script>
   <script src="js/certificate.js"></script>
+
+  <!-- Scarecrow interactivity: pick a random quote on click, run the
+       2-second red-eye glow, then sleep for 2 minutes (subtle 💤 above him,
+       desaturated figure, cursor off) before he can respond again. Also
+       pre-empts the looping webm's natural seam to remove flicker. -->
+  <script>
+    (function () {
+      const el = document.getElementById("scarecrowSidebar");
+      if (!el) return;
+      const vid = el.querySelector(".scarecrow-sidebar__video");
+
+      const SCARECROW_QUOTES = [
+        "skeleton crew, really? you're doing this",
+        "here to protect you",
+        "please told bats to not sit on me",
+        "feels good to be here",
+        "okay enough"
+      ];
+      // Cooldown is random 2–3 min so wake-ups feel less robotic.
+      function pickCooldownMs() {
+        return Math.floor((2 * 60 * 1000) + Math.random() * (60 * 1000));
+      }
+      // Shuffled-queue picker — every quote in the pool is shown before
+      // any repeats, then the queue reshuffles. Guarantees "random but
+      // never feels stuck on the same line".
+      function makeQuotePicker(pool) {
+        let queue = [];
+        function refill() {
+          queue = pool.slice();
+          for (let i = queue.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const t = queue[i]; queue[i] = queue[j]; queue[j] = t;
+          }
+        }
+        return function next() {
+          if (!queue.length) refill();
+          return queue.shift();
+        };
+      }
+      const pickQuote   = makeQuotePicker(SCARECROW_QUOTES);
+      const GLOW_MS     = 2050;
+      const QUOTE_MS    = 3250;
+
+      // Smooth-loop guard: pre-empt the natural loop seam.
+      if (vid) {
+        const SEAM = 0.06;
+        vid.addEventListener("timeupdate", () => {
+          if (!vid.duration || isNaN(vid.duration)) return;
+          if (vid.duration - vid.currentTime <= SEAM) {
+            try { vid.currentTime = 0; } catch (_) {}
+          }
+        });
+        document.addEventListener("visibilitychange", () => {
+          if (!document.hidden && vid.paused) {
+            vid.play().catch(() => {});
+          }
+        });
+      }
+
+      let asleep = false;
+      let glowTimer = null;
+      let sleepTimer = null;
+
+      function showQuote(text) {
+        const bubble = document.createElement("span");
+        bubble.className = "scarecrow-quote";
+        bubble.textContent = text;
+        bubble.style.animationDuration = QUOTE_MS + "ms";
+        bubble.addEventListener("animationend", () => bubble.remove());
+        el.appendChild(bubble);
+      }
+
+      function flashGlow() {
+        el.classList.remove("is-glowing");
+        void el.offsetWidth;
+        el.classList.add("is-glowing");
+        if (glowTimer) clearTimeout(glowTimer);
+        glowTimer = setTimeout(() => el.classList.remove("is-glowing"), GLOW_MS);
+      }
+
+      function sleep() {
+        asleep = true;
+        el.classList.add("is-sleeping");
+        if (sleepTimer) clearTimeout(sleepTimer);
+        sleepTimer = setTimeout(() => {
+          asleep = false;
+          el.classList.remove("is-sleeping");
+        }, pickCooldownMs());
+      }
+
+      function speak() {
+        if (asleep) return;
+        showQuote(pickQuote());
+        flashGlow();
+        sleep();
+      }
+
+      el.addEventListener("click", speak);
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); speak(); }
+      });
+    })();
+  </script>
 </body>
 
 </html>

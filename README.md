@@ -28,7 +28,7 @@ The stack is intentionally minimal: no build step, no framework, no managed back
 
 ![Student Dashboard](./screenshots/Student%20Dashboard.png)
 ![Resume Analyzer](./screenshots/Tars%20Resume%20Analyzer.png)
-![Virtual Workroom](./screenshots/Virtual%20Wokroom.png)
+![Virtual Workroom](./screenshots/Virtual%20Workroom.png)
 ![Internship Listings](./screenshots/Internship's%20Listing.png)
 
 ---

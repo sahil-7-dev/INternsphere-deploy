@@ -12,6 +12,8 @@
 
 [Live](https://internsphere-pi.vercel.app) · [Report an Issue](https://github.com/your-username/internsphere/issues)
 
+> Feature-complete. Not under active development.
+
 </div>
 
 ---
@@ -26,10 +28,10 @@ The stack is intentionally minimal: no build step, no framework, no managed back
 
 ## Screenshots
 
-![Student Dashboard](./screenshots/Student%20Dashboard.png)
-![Resume Analyzer](./screenshots/Tars%20Resume%20Analyzer.png)
-![Virtual Workroom](./screenshots/Virtual%20Workroom.png)
-![Internship Listings](./screenshots/Internship's%20Listing.png)
+![Student Dashboard](./screenshots/dashboard.png)
+![Resume Analyzer](./screenshots/resume-analyzer.png)
+![Virtual Workroom](./screenshots/workroom.png)
+![Internship Listings](./screenshots/internships.png)
 
 ---
 

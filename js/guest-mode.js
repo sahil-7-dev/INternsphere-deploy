@@ -52,6 +52,7 @@ const BLOCKED_CLICK_SELECTORS = [
   "#raAnalyzeBtn",
   "#uploadResumeBtn",
   "#aiAnalyzerLink",
+  "#openResumeAnalyzerBtn",
   "#cvFeedbackBtn",
   "#pitchBtn",
   // settings / profile writes

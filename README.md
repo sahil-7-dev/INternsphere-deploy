@@ -10,7 +10,7 @@
 
 **Full-lifecycle internship platform — discovery, application, task execution, and certification — powered by Google Gemini 2.5 Flash.**
 
-[Live](https://internsphere-pi.vercel.app) · [Report an Issue]((https://github.com/sahil-7-dev)/internsphere/issues)
+[Live](https://internsphere-pi.vercel.app) · [Report an Issue](https://github.com/sahil-7-dev/INternsphere-deploy/issues)
 
 > Feature-complete. Not under active development.
 

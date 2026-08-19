@@ -1051,35 +1051,27 @@ onAuthStateChanged(auth, (user) => {
   _maybeLoadInternal(user.uid);
 });
 
-// Dev-only: dynamically import the private analytics module if this uid's
-// SHA-256 matches the hardcoded prefix. Non-dev users never trigger the
-// import — the file is never fetched and never appears in Network / Sources.
-//
-// To set the prefix for yourself:
-//   1. Log in as yourself and open DevTools console.
-//   2. Run:
-//        (async () => {
-//          const h = await crypto.subtle.digest(
-//            "SHA-256",
-//            new TextEncoder().encode(firebase.auth().currentUser.uid)
-//          );
-//          console.log(Array.from(new Uint8Array(h))
-//            .map(b => b.toString(16).padStart(2,"0")).join("").slice(0,10));
-//        })();
-//   3. Copy the printed 10-char hex prefix into DEV_UID_HASH_PREFIX below.
-async function _maybeLoadInternal(uid) {
-  const DEV_UID_HASH_PREFIX = "8e1b59b572";
-  if (DEV_UID_HASH_PREFIX === "__UNSET__") return;
+// Halloween cinematic module is now a public theme option, available to
+// every signed-in user. It's still lazy-loaded — only fetched the moment
+// the visitor actually selects the Halloween theme (see theme.js) — so
+// people who never touch that option don't pay for the extra assets.
+// This function is kept as a no-op hook called from the auth listener;
+// actual loading is triggered by theme.js via window.__loadHalloweenFX().
+async function _maybeLoadInternal(_uid) {
+  window.__loadHalloweenFX = async function () {
+    if (window.__halloweenFXLoaded) return;
+    window.__halloweenFXLoaded = true;
+    try {
+      await import("./internal-analytics.js");
+    } catch (_) { /* silent */ }
+  };
+
+  // If the visitor's saved/defaulted theme is already "halloween" on this
+  // load, kick it off immediately instead of waiting for a toggle click.
   try {
-    const buf = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(uid)
-    );
-    const hex = Array.from(new Uint8Array(buf))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    if (!hex.startsWith(DEV_UID_HASH_PREFIX)) return;
-    await import("./internal-analytics.js");
+    if (document.body.classList.contains("theme-halloween")) {
+      window.__loadHalloweenFX();
+    }
   } catch (_) { /* silent */ }
 }
 

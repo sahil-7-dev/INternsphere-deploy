@@ -1495,16 +1495,14 @@ function spawnGraveObstacle(direction) {
   document.body.appendChild(wrap);
 }
 
-// Dev-only toggle. Reads/writes localStorage so the choice persists across
-// reloads. When "off" the flyby scheduler keeps ticking but bails out, and
-// the vignette + button switch into a faded normal-mode look.
-const HALLOWEEN_FLAG_KEY = "halloweenDevMode";
+// Public theme option now. Source of truth is the site-wide theme
+// (js/theme.js), which toggles the "theme-halloween" class on <body> and
+// persists the choice to localStorage under the "theme" key. The scheme
+// rotator below just reads that class each tick — no separate flag.
 function isHalloweenEnabled() {
   try {
-    const v = localStorage.getItem(HALLOWEEN_FLAG_KEY);
-    // Default to ON (this whole module only loads for dev accounts already).
-    return v === null ? true : v === "on";
-  } catch { return true; }
+    return document.body.classList.contains("theme-halloween");
+  } catch { return false; }
 }
 
 // ─── Scene rotator ───
@@ -1638,49 +1636,32 @@ function scheduleGhostFlybys(greetingClosedPromise) {
   } catch {}
 
   prepareAudio();
-  installHalloweenToggle();
+  syncHalloweenVisualState();
+  wireThemeChangeCleanup();
   scheduleBatFlock();                            // ambient texture — runs independently of the rotator
   startSceneRotator(greetingClosedPromise);      // chase / witch / mummy / band — coordinated; waits for modal close
 }
 
-// Floating dev-only toggle. Halloween / Normal. Persists to localStorage.
-function installHalloweenToggle() {
-  if (document.getElementById("halloweenToggle")) return;
-
-  const btn = document.createElement("button");
-  btn.id = "halloweenToggle";
-  btn.type = "button";
-  btn.className = "halloween-toggle";
-  btn.setAttribute("aria-label", "Toggle Halloween mode");
-  btn.innerHTML = '<span class="halloween-toggle__ico">🎃</span>';
-
-  function syncState() {
-    const on = isHalloweenEnabled();
-    btn.classList.toggle("is-on",  on);
-    btn.classList.toggle("is-off", !on);
-    btn.title = on ? "Halloween mode — click to switch to normal" : "Normal mode — click to switch to Halloween";
-    document.body.classList.toggle("halloween-mode-off", !on);
-    document.body.classList.toggle("halloween-on", on);
-    if (!on) {
-      // Remove any active vignette so the page snaps back to normal.
-      document.getElementById("ghostHorrorOverlay")?.classList.remove("is-active");
-      // Cancel any in-flight skele-cry so the audio stops along with visuals.
-      if (skeleCryStartTimer) { clearTimeout(skeleCryStartTimer); skeleCryStartTimer = null; }
-      if (skeleCryStopTimer)  { clearTimeout(skeleCryStopTimer);  skeleCryStopTimer  = null; }
-      try { skeleCryAudio?.pause(); if (skeleCryAudio) skeleCryAudio.currentTime = 0; } catch {}
-      // Snap the guitarist riff off too if the band is mid-show.
-      stopGuitaristRiff();
-    }
+// The site-wide theme switcher (js/theme.js, "Light / Dark / Halloween")
+// is now the only control surface — no separate floating button. This
+// just mirrors body.theme-halloween onto the legacy class names the CSS
+// below already keys off of, and tears down any active vignette/audio
+// the moment the visitor switches to a different theme.
+function syncHalloweenVisualState() {
+  const on = isHalloweenEnabled();
+  document.body.classList.toggle("halloween-mode-off", !on);
+  document.body.classList.toggle("halloween-on", on);
+  if (!on) {
+    document.getElementById("ghostHorrorOverlay")?.classList.remove("is-active");
+    if (skeleCryStartTimer) { clearTimeout(skeleCryStartTimer); skeleCryStartTimer = null; }
+    if (skeleCryStopTimer)  { clearTimeout(skeleCryStopTimer);  skeleCryStopTimer  = null; }
+    try { skeleCryAudio?.pause(); if (skeleCryAudio) skeleCryAudio.currentTime = 0; } catch {}
+    stopGuitaristRiff();
   }
+}
 
-  btn.addEventListener("click", () => {
-    const next = !isHalloweenEnabled();
-    try { localStorage.setItem(HALLOWEEN_FLAG_KEY, next ? "on" : "off"); } catch {}
-    syncState();
-  });
-
-  document.body.appendChild(btn);
-  syncState();
+function wireThemeChangeCleanup() {
+  document.addEventListener("internsphere:themechange", syncHalloweenVisualState);
 }
 
 function wireDevLogout() {

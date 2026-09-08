@@ -1,8 +1,15 @@
 // js/theme.js
+// Shared by every page (dashboard, login, admin, internship details,
+// virtual workroom, etc). Halloween mode has dedicated CSS/effects that
+// only exist on dashboard.html — everywhere else must never see it.
 
-// Halloween window used for the seasonal DEFAULT only. This never
-// overrides a theme the user picked explicitly — see loadInitialTheme().
-// Adjust the month/day pair as needed (months are 0-indexed: 9 = Oct).
+// True only on the dashboard. This is the single gate that decides
+// whether "halloween" is a reachable theme at all on the current page.
+const HALLOWEEN_CAPABLE = /(^|\/)dashboard\.html$/i.test(location.pathname);
+
+// Halloween window used for the seasonal DEFAULT only (dashboard-only —
+// see HALLOWEEN_CAPABLE above). Never overrides a theme the user picked
+// explicitly — see loadInitialTheme(). Months are 0-indexed: 9 = Oct.
 function isHalloweenSeason(d = new Date()) {
   const start = new Date(d.getFullYear(), 9, 15);  // Oct 15
   const end   = new Date(d.getFullYear(), 10, 2);  // Nov 2 (inclusive)
@@ -10,7 +17,7 @@ function isHalloweenSeason(d = new Date()) {
   return d >= start && d <= end;
 }
 
-const THEME_ORDER = ["light", "dark", "halloween"];
+const THEME_ORDER = HALLOWEEN_CAPABLE ? ["light", "dark", "halloween"] : ["light", "dark"];
 const THEME_META = {
   light:     { icon: "☀️", label: "Light" },
   dark:      { icon: "🌙", label: "Dark" },
@@ -18,6 +25,10 @@ const THEME_META = {
 };
 
 function applyTheme(theme) {
+  // Outside the dashboard, "halloween" is not a valid state under any
+  // circumstance — including a value inherited from localStorage set on
+  // the dashboard. Hard fall back to dark.
+  if (theme === "halloween" && !HALLOWEEN_CAPABLE) theme = "dark";
   if (!THEME_ORDER.includes(theme)) theme = "dark";
 
   document.body.classList.toggle("light", theme === "light");
@@ -33,6 +44,8 @@ function applyTheme(theme) {
   document.documentElement.style.backgroundColor =
     theme === "light" ? "#f6f8fb" : theme === "halloween" ? "#0d0710" : "#111113";
 
+  // Only persist "halloween" from the page that's actually capable of it,
+  // so other tabs/pages sharing localStorage don't inherit a broken state.
   localStorage.setItem("theme", theme);
 
   const toggleBtn = document.getElementById("themeToggle");
@@ -50,8 +63,9 @@ function applyTheme(theme) {
   }
 
   // Lazily bring in the Halloween effects module only when that theme is
-  // actually selected — everyone else never fetches it.
-  if (theme === "halloween" && typeof window.__loadHalloweenFX === "function") {
+  // actually selected on the dashboard — everyone/everywhere else never
+  // fetches it.
+  if (theme === "halloween" && HALLOWEEN_CAPABLE && typeof window.__loadHalloweenFX === "function") {
     window.__loadHalloweenFX();
   }
 
@@ -62,17 +76,22 @@ function applyTheme(theme) {
 }
 
 // Decide the theme to show on a fresh page load.
-//   1. An explicit prior choice always wins, in or out of season.
-//   2. No saved choice yet -> default to Halloween during the seasonal
-//      window, otherwise fall back to dark (previous default).
+//   1. An explicit prior choice always wins, in or out of season — but
+//      only if this page is even capable of showing it (dashboard-only
+//      for "halloween"; see HALLOWEEN_CAPABLE).
+//   2. No usable saved choice -> on the dashboard, default to Halloween
+//      during the seasonal window; everywhere else, always dark.
 function loadInitialTheme() {
   const saved =
     localStorage.getItem("theme") ||
     localStorage.getItem("internsphere_theme");
 
   if (saved && THEME_ORDER.includes(saved)) return saved;
+  // A saved "halloween" value exists but this page can't show it
+  // (e.g. saved on the dashboard, now viewing login/admin/etc) -> dark.
+  if (saved === "halloween" && !HALLOWEEN_CAPABLE) return "dark";
 
-  return isHalloweenSeason() ? "halloween" : "dark";
+  return HALLOWEEN_CAPABLE && isHalloweenSeason() ? "halloween" : "dark";
 }
 
 document.addEventListener("DOMContentLoaded", () => {

@@ -230,6 +230,9 @@ body.light .topbar {
 }
 
 .icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
   width: 42px;
   height: 42px;
@@ -257,6 +260,7 @@ body.light .topbar {
 .theme-toggle {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   min-height: 42px;
   padding: 10px 12px;
@@ -329,6 +333,10 @@ body.light .topbar {
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   cursor: pointer;
   padding: 10px;
   flex-shrink: 0;
@@ -336,11 +344,12 @@ body.light .topbar {
 
 .hamburger span {
   display: block;
+  flex-shrink: 0;
   height: 2px;
   width: 100%;
   background: color-mix(in srgb, var(--text) 78%, transparent);
   border-radius: 99px;
-  margin: 6px 0;
+  margin: 0;
 }
 
 .layout {
@@ -1184,7 +1193,7 @@ p {
 
 @media (max-width: 768px) {
   .hamburger {
-    display: block;
+    display: flex;
   }
 
   .main {
@@ -3877,4 +3886,20 @@ body.light .app-details-footer .btn {
 @media (max-width: 640px) {
   .cert-tile { flex-wrap: wrap; }
   .cert-tile__btn { width: 100%; justify-content: center; }
+}
+
+/* Keep the compact navbar controls the same size at each mobile breakpoint. */
+@media (max-width: 640px) {
+  .topbar-actions > button {
+    height: 40px !important;
+    min-height: 40px;
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .topbar-actions > button {
+    height: 36px !important;
+    min-height: 36px;
+  }
 }

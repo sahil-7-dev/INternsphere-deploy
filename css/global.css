@@ -306,6 +306,10 @@ body.theme-light .btn-ghost:hover {
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface) 65%, transparent);
   display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   cursor: pointer;
   padding: 10px;
   flex-shrink: 0;
@@ -313,11 +317,12 @@ body.theme-light .btn-ghost:hover {
 
 .hamburger span {
   display: block;
+  flex-shrink: 0;
   height: 2px;
   width: 100%;
   background: color-mix(in srgb, var(--text) 75%, transparent);
   border-radius: 99px;
-  margin: 6px 0;
+  margin: 0;
 }
 
 /* ===== hero ===== */
@@ -1521,7 +1526,7 @@ body.theme-light .footer {
 
 @media (max-width: 860px) {
   .hamburger {
-    display: block;
+    display: flex;
   }
 
   .nav-inner {

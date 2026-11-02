@@ -3,23 +3,58 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ───────── Helpers ─────────
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function hasUserDoc() {
+      return signedIn()
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // Suspended accounts lose their privileges even if role is still "admin".
     function isAdmin() {
-      return request.auth != null
-          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+      return hasUserDoc()
+          && userDoc().data.role == "admin"
+          && userDoc().data.get("disabled", false) != true;
+    }
+
+    function hasRole(r) {
+      return hasUserDoc() && userDoc().data.role == r;
+    }
+
+    // Fields of the incoming write that differ from the stored doc.
+    function changed() {
+      return request.resource.data.diff(resource.data).affectedKeys();
     }
 
     // ── APPLICATIONS ─────────────────────────────
     match /applications/{docId} {
-      allow read: if isAdmin() || (request.auth != null && (
+      allow read: if isAdmin() || (signedIn() && (
         resource.data.studentId == request.auth.uid ||
         resource.data.companyId == request.auth.uid
       ));
-      allow create: if request.auth != null
-        && request.resource.data.studentId == request.auth.uid;
-      allow update: if isAdmin() || (request.auth != null && (
-        resource.data.studentId == request.auth.uid ||
-        resource.data.companyId == request.auth.uid
+      // Students may only create fresh "Pending" applications — never a
+      // pre-approved one or one carrying an issued offer / certificate.
+      allow create: if signedIn()
+        && request.resource.data.studentId == request.auth.uid
+        && request.resource.data.get("status", "Pending") == "Pending"
+        && request.resource.data.get("offerLetterIssued", false) != true
+        && request.resource.data.get("certificateIssued", false) != true;
+      // The company drives the status/offer/certificate lifecycle; the
+      // student can't touch those fields (no self-approval / self-issued
+      // certificate). Nobody but an admin can re-parent an application.
+      allow update: if isAdmin() || (signedIn() && (
+        (resource.data.companyId == request.auth.uid
+          && !changed().hasAny(["studentId", "companyId"])) ||
+        (resource.data.studentId == request.auth.uid
+          && !changed().hasAny(["studentId", "companyId", "internshipId", "status",
+                                "offerLetterIssued", "offerLetterIssuedAt",
+                                "certificateIssued", "certificateIssuedAt"]))
       ));
       allow delete: if isAdmin();
     }
@@ -29,9 +64,16 @@ service cloud.firestore {
     // also unblocks guest / preview mode before anonymous auth settles.
     match /internships/{docId} {
       allow read: if true;
-      allow create: if request.auth != null
-        && request.resource.data.companyId == request.auth.uid;
-      allow update, delete: if isAdmin() || (request.auth != null
+      // Only verified company accounts may post (mirrors the UI gate in
+      // dashboard-company.js — previously any signed-in user could post).
+      allow create: if signedIn()
+        && request.resource.data.companyId == request.auth.uid
+        && hasRole("company")
+        && get(/databases/$(database)/documents/companies/$(request.auth.uid)).data.get("verified", false) == true;
+      allow update: if isAdmin() || (signedIn()
+        && resource.data.companyId == request.auth.uid
+        && request.resource.data.companyId == request.auth.uid);
+      allow delete: if isAdmin() || (signedIn()
         && resource.data.companyId == request.auth.uid);
     }
 
@@ -40,70 +82,106 @@ service cloud.firestore {
     // without requiring authentication.
     match /companies/{uid} {
       allow read: if true;
-      allow write: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      // Owners can edit their profile (and re-request verification by
+      // clearing `rejected`), but only an admin can flip `verified`.
+      allow create: if isAdmin() || (signedIn() && request.auth.uid == uid
+        && request.resource.data.get("verified", false) != true);
+      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid
+        && request.resource.data.get("verified", false) == resource.data.get("verified", false));
+      allow delete: if isAdmin() || (signedIn() && request.auth.uid == uid);
     }
 
     // ── STUDENTS ─────────────────────────────
+    // Students see only their own profile; companies need to read
+    // applicant profiles (dashboard-company.js / company-tasks.js).
     match /students/{uid} {
-      allow read: if request.auth != null;
-      allow write: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow read: if isAdmin()
+        || (signedIn() && request.auth.uid == uid)
+        || hasRole("company");
+      allow write: if isAdmin() || (signedIn() && request.auth.uid == uid);
     }
 
     // ── USERS ─────────────────────────────
     match /users/{uid} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && request.auth.uid == uid;
-      allow update: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow read: if signedIn();
+      // Self-signup may only pick student/company (or omit role) — never
+      // admin/dev — and can't pre-set the suspension flag.
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.get("role", "student") in ["student", "company"]
+        && request.resource.data.get("disabled", false) == false;
+      // Self-updates can't change role or suspension status (privilege
+      // escalation / un-suspending yourself). Admins can change anything.
+      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid
+        && !changed().hasAny(["role", "disabled"]));
       allow delete: if isAdmin();
     }
 
     // ── NOTIFICATIONS ─────────────────────────────
     match /notifications/{docId} {
-      allow create: if request.auth != null
+      // Non-admins must stamp their own uid and can't pose as the admin.
+      allow create: if signedIn()
                     && (
                       isAdmin()
-                      || request.resource.data.senderUid == request.auth.uid
+                      || (request.resource.data.senderUid == request.auth.uid
+                          && request.resource.data.get("senderRole", "") != "admin")
                     );
-      allow read, update: if isAdmin() || (request.auth != null
+      allow read: if isAdmin() || (signedIn()
         && resource.data.studentId == request.auth.uid);
+      // Recipients may only mark as read.
+      allow update: if isAdmin() || (signedIn()
+        && resource.data.studentId == request.auth.uid
+        && changed().hasOnly(["isRead"]));
       allow delete: if isAdmin();
     }
 
     // ── TASKS ─────────────────────────────
     match /tasks/{taskId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null
+      allow read: if signedIn();
+      allow create: if signedIn()
         && request.auth.uid == request.resource.data.companyId;
-      allow update, delete: if isAdmin() || (request.auth != null
+      allow update: if isAdmin() || (signedIn()
+        && request.auth.uid == resource.data.companyId
+        && request.auth.uid == request.resource.data.companyId);
+      allow delete: if isAdmin() || (signedIn()
         && request.auth.uid == resource.data.companyId);
     }
 
     // ── TASK SUBMISSIONS ─────────────────────────
     match /taskSubmissions/{subId} {
-      allow read: if isAdmin() || (request.auth != null && (
+      allow read: if isAdmin() || (signedIn() && (
         resource.data.studentId == request.auth.uid ||
         resource.data.companyId == request.auth.uid
       ));
-      allow create: if request.auth != null
-        && request.auth.uid == request.resource.data.studentId;
-      allow update: if isAdmin() || (request.auth != null && (
-        resource.data.companyId == request.auth.uid ||
-        resource.data.studentId == request.auth.uid
+      allow create: if signedIn()
+        && request.auth.uid == request.resource.data.studentId
+        && request.resource.data.get("reviewed", false) == false
+        && !("feedback" in request.resource.data);
+      // Company reviews; student may resubmit (which resets review state)
+      // but can never grade themselves.
+      allow update: if isAdmin() || (signedIn() && (
+        (resource.data.companyId == request.auth.uid
+          && !changed().hasAny(["studentId", "companyId"])) ||
+        (resource.data.studentId == request.auth.uid
+          && !changed().hasAny(["studentId", "companyId"])
+          && request.resource.data.get("reviewed", false) == false
+          && !("feedback" in request.resource.data))
       ));
       allow delete: if isAdmin();
     }
 
     // ── SUPPORT MESSAGES ─────────────────────────
     match /supportMessages/{docId} {
-      allow create: if request.auth != null
-                    && request.auth.uid == request.resource.data.uid;
+      allow create: if signedIn()
+                    && request.auth.uid == request.resource.data.uid
+                    && request.resource.data.get("resolvedAt", null) == null;
       allow read, update, delete: if isAdmin();
     }
 
     // ── REPORTS (moderation queue) ─────────────────
     match /reports/{docId} {
-      allow create: if request.auth != null
-                    && request.resource.data.reporterUid == request.auth.uid;
+      allow create: if signedIn()
+                    && request.resource.data.reporterUid == request.auth.uid
+                    && request.resource.data.get("resolvedAt", null) == null;
       allow read, update: if isAdmin();
       allow delete: if false;
     }
@@ -116,4 +194,3 @@ service cloud.firestore {
 
   }
 }
-

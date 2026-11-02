@@ -30,7 +30,7 @@ if (!orbBtn || !modal) {
     all = [];
     snap.forEach((d) => {
       const data = d.data();
-      if (data && (data.status || "Open") === "Open") {
+      if (data && String(data.status || "Open").toLowerCase() === "open") {
         all.push({ id: d.id, ...data });
       }
     });
@@ -46,14 +46,14 @@ if (!orbBtn || !modal) {
     results.innerHTML = list
       .slice(0, 20)
       .map((i, idx) => {
-        const skills = (i.skills || "")
+        const skills = (Array.isArray(i.skills) ? i.skills.join(",") : String(i.skills || ""))
           .split(",")
           .map((s) => s.trim())
           .filter(Boolean)
           .slice(0, 3)
           .join(" · ");
         return `
-          <div class="ai-search-result" data-idx="${idx}" data-id="${i.id}">
+          <div class="ai-search-result" data-idx="${idx}" data-id="${esc(i.id)}">
             <strong>${esc(i.title || "Untitled")}</strong>
             <span>${esc(i.companyName || "Company")} · ${esc(i.location || "—")} · ${esc(i.duration || "")} ${skills ? "· " + esc(skills) : ""}</span>
           </div>`;

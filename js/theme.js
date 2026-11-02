@@ -24,7 +24,7 @@ const THEME_META = {
   halloween: { icon: "🎃", label: "Halloween" },
 };
 
-function applyTheme(theme) {
+function applyTheme(theme, persist = true) {
   // Outside the dashboard, "halloween" is not a valid state under any
   // circumstance — including a value inherited from localStorage set on
   // the dashboard. Hard fall back to dark.
@@ -36,6 +36,11 @@ function applyTheme(theme) {
   document.body.classList.toggle("theme-dark", theme === "dark");
   document.body.classList.toggle("theme-halloween", theme === "halloween");
   document.documentElement.classList.toggle("light", theme === "light");
+  // The inline anti-flash script in each page's <head> adds html.dark for any
+  // non-light theme. Keep it in sync, otherwise `html.dark body` rules
+  // (tokens.css, internship-details.css) keep forcing dark colours after
+  // the user switches to light.
+  document.documentElement.classList.toggle("dark", theme !== "light");
   document.documentElement.classList.toggle("theme-light", theme === "light");
   document.documentElement.classList.toggle("theme-dark", theme === "dark");
   document.documentElement.classList.toggle("theme-halloween", theme === "halloween");
@@ -46,7 +51,12 @@ function applyTheme(theme) {
 
   // Only persist "halloween" from the page that's actually capable of it,
   // so other tabs/pages sharing localStorage don't inherit a broken state.
-  localStorage.setItem("theme", theme);
+  // The initial load only re-applies what was derived from storage, so it
+  // doesn't persist: that keeps a dashboard-only "halloween" choice from
+  // being overwritten with the "dark" fallback on other pages.
+  if (persist) {
+    try { localStorage.setItem("theme", theme); } catch (_) {}
+  }
 
   const toggleBtn = document.getElementById("themeToggle");
   if (toggleBtn) {
@@ -82,9 +92,12 @@ function applyTheme(theme) {
 //   2. No usable saved choice -> on the dashboard, default to Halloween
 //      during the seasonal window; everywhere else, always dark.
 function loadInitialTheme() {
-  const saved =
-    localStorage.getItem("theme") ||
-    localStorage.getItem("internsphere_theme");
+  let saved = null;
+  try {
+    saved =
+      localStorage.getItem("theme") ||
+      localStorage.getItem("internsphere_theme");
+  } catch (_) {}
 
   if (saved && THEME_ORDER.includes(saved)) return saved;
   // A saved "halloween" value exists but this page can't show it
@@ -97,7 +110,7 @@ function loadInitialTheme() {
 document.addEventListener("DOMContentLoaded", () => {
   const toggleBtn = document.getElementById("themeToggle");
 
-  applyTheme(loadInitialTheme());
+  applyTheme(loadInitialTheme(), false);
 
   if (toggleBtn) {
     toggleBtn.addEventListener("click", () => {

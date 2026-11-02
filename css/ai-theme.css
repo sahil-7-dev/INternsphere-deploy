@@ -198,7 +198,6 @@ body.theme-light .notif-item.unread {
     box-shadow var(--dur-base, 220ms) var(--ease-expo),
     padding var(--dur-base, 220ms) var(--ease-expo),
     border-color var(--dur-base, 220ms) var(--ease-expo);
-  will-change: padding;
 }
 
 .nav.is-compact,

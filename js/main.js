@@ -11,8 +11,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // MOBILE MENU
 
-  hamburger?.addEventListener("click", () => navLinksUL?.classList.toggle("active"));
-  navLinks.forEach((link) => link.addEventListener("click", () => navLinksUL?.classList.remove("active")));
+  const setMenuOpen = (open) => {
+    navLinksUL?.classList.toggle("active", open);
+    hamburger?.setAttribute("aria-expanded", open ? "true" : "false");
+  };
+  hamburger?.addEventListener("click", () =>
+    setMenuOpen(!navLinksUL?.classList.contains("active"))
+  );
+  navLinks.forEach((link) => link.addEventListener("click", () => setMenuOpen(false)));
 
   // PHONE THEME TOGGLE PLACEMENT
   const PHONE_BREAKPOINT = 480;
@@ -152,7 +158,7 @@ function typeText(el, text, speed = 60) {
 // LOGO CLICK INTERACTION
 if (logo) {
   logo.addEventListener("click", () => {
-    if (typingActive) return;
+    if (typingActive || !brandName) return;
 
     typingActive = true;
 

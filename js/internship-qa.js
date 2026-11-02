@@ -9,12 +9,13 @@ function getInternshipSnapshot() {
   const title = base.title || document.querySelector(".hero-title")?.textContent?.trim() || "";
   const company = base.companyName || "";
   const desc = document.querySelector(".hero-subtitle")?.textContent?.trim() || "";
+  // .hero-meta values are [location, duration, stipend] (internship-details.js).
   const meta = document.querySelectorAll(".hero-meta .meta-value") || [];
-  const dept = meta[0]?.textContent?.trim() || "";
-  const loc = meta[1]?.textContent?.trim() || "";
-  const stipend = meta[2]?.textContent?.trim() || "";
-  const mini = document.querySelectorAll(".mini-grid .mini-value") || [];
-  const duration = mini[1]?.textContent?.trim() || "";
+  const str = (v) => (v == null ? "" : String(v).trim());
+  const dept = str(base.department);
+  const loc = str(base.location) || meta[0]?.textContent?.trim() || "";
+  const stipend = str(base.stipend) || meta[2]?.textContent?.trim() || "";
+  const duration = str(base.duration) || meta[1]?.textContent?.trim() || "";
 
   const skillEls = document.querySelectorAll(".bullets li");
   const otherText = Array.from(skillEls).map((el) => el.textContent?.trim()).filter(Boolean).slice(0, 25).join(" · ");
@@ -41,6 +42,7 @@ function buildSystemPrompt() {
 }
 
 let chat = null;
+let sending = false;
 
 function appendMessage(text, from = "bot") {
   const thread = $("qaThread");
@@ -69,6 +71,10 @@ function appendTyping() {
 async function sendMessage(text) {
   const clean = (text || "").trim();
   if (!clean) return;
+  // One request at a time — overlapping sends (chip + Enter) would race on
+  // the shared chat history.
+  if (sending) return;
+  sending = true;
 
   // Always rebuild system prompt so it captures the latest DOM state
   // (internship details are rendered async - first message may fire before paint)
@@ -107,9 +113,13 @@ async function sendMessage(text) {
     err.style.borderColor = "rgba(239,68,68,0.35)";
     err.style.color = "#fca5a5";
     err.textContent = "⚠ " + friendlyGeminiError(e);
-    $("qaThread").appendChild(err);
-    $("qaThread").scrollTop = $("qaThread").scrollHeight;
+    const thread = $("qaThread");
+    if (thread) {
+      thread.appendChild(err);
+      thread.scrollTop = thread.scrollHeight;
+    }
   } finally {
+    sending = false;
     if (sendBtn) sendBtn.disabled = false;
   }
 }
@@ -139,7 +149,7 @@ function init() {
     e.preventDefault();
     const input = $("qaInput");
     const v = input?.value;
-    if (!v?.trim()) return;
+    if (!v?.trim() || sending) return;
     input.value = "";
     sendMessage(v);
   });

@@ -10,6 +10,60 @@ const DEFAULT_MODEL = "gemini-2.5-flash";
 const PROXY_URL =
   (typeof window !== "undefined" && window.GEMINI_PROXY_URL) || "/api/gemini";
 
+// Slightly above the proxy's own 25s upstream timeout so the server's
+// clean 504 normally wins; this only fires if the network itself hangs.
+const REQUEST_TIMEOUT_MS = 35_000;
+// Transient gateway errors / network blips get one quick retry. 429, 4xx
+// and 504 (already waited the full upstream timeout) are never retried.
+const RETRY_STATUSES = new Set([502, 503]);
+const RETRY_DELAY_MS = 1200;
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function getAuthHeader() {
+  try {
+    // Relative to this module so it also works when the site isn't served
+    // from the domain root; resolves to the same module instance.
+    const { auth } = await import("../firebase/firebase.js");
+    // On a fresh page load currentUser is null until the persisted session
+    // is restored — wait for that instead of sending an anonymous request
+    // that the proxy will 401.
+    if (typeof auth.authStateReady === "function") await auth.authStateReady();
+    const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    // Guest mode or auth unavailable — proceed without token
+    return {};
+  }
+}
+
+async function postToProxy(payload) {
+  const headers = { "Content-Type": "application/json", ...(await getAuthHeader()) };
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(PROXY_URL, {
+        method: "POST",
+        headers,
+        body: payload,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      if (attempt === 0 && RETRY_STATUSES.has(res.status)) {
+        await sleep(RETRY_DELAY_MS);
+        continue;
+      }
+      return res;
+    } catch (e) {
+      if (e?.name === "TimeoutError" || e?.name === "AbortError") {
+        const err = new Error("Gemini request timed out");
+        err.status = 504;
+        throw err;
+      }
+      if (attempt === 0) { await sleep(RETRY_DELAY_MS); continue; }
+      throw e;
+    }
+  }
+}
+
 // generateContent
 export async function askGemini(opts = {}) {
   const {
@@ -49,23 +103,11 @@ export async function askGemini(opts = {}) {
     body.systemInstruction = { parts: [{ text: system }] };
   }
 
-  // Attach Firebase ID token for server-side auth verification + per-user rate limiting
-  let authHeader = {};
-  try {
-    const { auth } = await import("/firebase/firebase.js");
-    const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-    if (token) authHeader = { Authorization: `Bearer ${token}` };
-  } catch {
-    // Guest mode or auth unavailable — proceed without token
-  }
+  // Firebase ID token is attached inside postToProxy for server-side auth
+  // verification + per-user rate limiting.
+  const res = await postToProxy(JSON.stringify({ model, body }));
 
-  const res = await fetch(PROXY_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeader },
-    body: JSON.stringify({ model, body }),
-  });
-
- if (!res.ok) {
+  if (!res.ok) {
     let detail = "";
     try {
       const text = await res.text();
@@ -87,8 +129,15 @@ export async function askGemini(opts = {}) {
   const data = await res.json();
 
   const cand = data?.candidates?.[0];
-  if (!cand) return "";
-  if (cand.finishReason === "SAFETY") {
+  if (!cand) {
+    // Prompt itself was blocked — surface it instead of returning "".
+    if (data?.promptFeedback?.blockReason) {
+      throw new Error("Gemini blocked the request due to safety filters.");
+    }
+    return "";
+  }
+  if (cand.finishReason === "SAFETY" || cand.finishReason === "PROHIBITED_CONTENT"
+      || cand.finishReason === "BLOCKLIST") {
     throw new Error("Gemini blocked the response due to safety filters.");
   }
   const partsOut = cand.content?.parts || [];
@@ -154,9 +203,11 @@ function tryParseJsonLoose(raw) {
 }
 
 function autoCloseJson(s) {
+  // Track open {/[ in order so a response truncated inside an array
+  // (e.g. `{"items":[{"a":1},{"b":`) is closed as `]}` rather than `}}`.
   let inString = false;
   let escape = false;
-  let depth = 0;
+  const stack = [];
   let end = s.length;
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
@@ -164,15 +215,21 @@ function autoCloseJson(s) {
     if (ch === "\\") { escape = true; continue; }
     if (ch === '"') { inString = !inString; continue; }
     if (inString) continue;
-    if (ch === "{") depth++;
-    else if (ch === "}") {
-      depth--;
-      if (depth === 0) { end = i + 1; break; }
+    if (ch === "{" || ch === "[") stack.push(ch);
+    else if (ch === "}" || ch === "]") {
+      stack.pop();
+      if (stack.length === 0) { end = i + 1; break; }
     }
   }
   let result = s.slice(0, end);
   if (inString) result += '"';
-  while (depth > 0) { result += "}"; depth--; }
+  // Drop a dangling separator, and inside an object a key that never got
+  // its value (`{"a":1,"b"` / `{"b":`), so the closed JSON can parse.
+  result = result.replace(/[,:]\s*$/, "");
+  if (stack[stack.length - 1] === "{") {
+    result = result.replace(/([{,])\s*"(?:\\.|[^"\\])*"\s*$/, (_, p) => (p === "{" ? "{" : ""));
+  }
+  while (stack.length) result += stack.pop() === "[" ? "]" : "}";
   return result;
 }
 

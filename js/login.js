@@ -11,6 +11,23 @@ import { auth } from "../firebase/firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 import { roleHome } from "./lib/role-home.js";
 
+// Set while this page is driving a sign-in / sign-up itself. Firebase fires
+// onAuthStateChanged as soon as the account exists — for a sign-up that is
+// BEFORE the users/{uid} doc has been written, so the listener below would
+// read a null role, navigate to dashboard.html and abort the pending writes.
+// safeRedirect() handles navigation for those flows instead.
+let manualSignIn = false;
+
+// Only same-origin relative paths are allowed for ?next=. A leading "//"
+// is a protocol-relative URL (open redirect to another host).
+function safeNextUrl() {
+  try {
+    const next = new URLSearchParams(location.search).get("next");
+    if (!next || next.startsWith("//")) return "";
+    return /^\/?[\w\-./?=&%]+$/.test(next) ? next : "";
+  } catch { return ""; }
+}
+
 onAuthStateChanged(auth, async (user) => {
   if (!user) return;
   // Anonymous users came from the guest card — don't auto-redirect them.
@@ -20,11 +37,14 @@ onAuthStateChanged(auth, async (user) => {
   // welcome modal, and interceptor don't bleed into their real session.
   try { sessionStorage.removeItem("guestRole"); } catch {}
   try { sessionStorage.removeItem("guestGreetingShown"); } catch {}
+  if (manualSignIn) return;
   try {
     const role = await getUserRole(user.uid);
-    const params = new URLSearchParams(location.search);
-    const next = params.get("next");
-    const safeNext = next && /^\/?[\w\-./?=&%]+$/.test(next) ? next : "";
+    // No users/{uid} doc: deleted account (or a sign-up still in flight in
+    // another tab) — stay on the login page rather than bouncing to a
+    // dashboard whose guard would sign the user out.
+    if (!role || manualSignIn) return;
+    const safeNext = safeNextUrl();
     window.location.href = safeNext ? safeNext : "./" + roleHome(role);
   } catch (_) { }
 });
@@ -102,21 +122,25 @@ async function safeRedirect(user) {
   // If the users/{uid} doc no longer exists (admin deleted this account),
   // the Auth record may still authenticate but the app should reject sign-in.
   if (realRole === null) {
+    manualSignIn = false;
     await signOut(auth);
     showAuthMsg("This account no longer exists. Please contact support if this is a mistake.", "error");
     return;
   }
 
-  localStorage.setItem(
-    "currentUser",
-    JSON.stringify({
-      uid: user.uid,
-      role: realRole
-    })
-  );
+  try {
+    localStorage.setItem(
+      "currentUser",
+      JSON.stringify({
+        uid: user.uid,
+        role: realRole
+      })
+    );
+  } catch {}
 
-if (realRole === "dev") sessionStorage.setItem("justLoggedIn", "true");
-window.location.href = "./" + roleHome(realRole);
+  try { if (realRole === "dev") sessionStorage.setItem("justLoggedIn", "true"); } catch {}
+  const safeNext = safeNextUrl();
+  window.location.href = safeNext ? safeNext : "./" + roleHome(realRole);
 }
 // DOM ready
 document.addEventListener("DOMContentLoaded", () => {
@@ -245,14 +269,16 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   googleBtn?.addEventListener("click", async () => {
+    manualSignIn = true;
     try {
       const remember = Boolean(rememberEl?.checked);
       await setRemember(remember);
-      localStorage.setItem("autoLogin", remember);
+      try { localStorage.setItem("autoLogin", remember); } catch {}
 
       const user = await loginWithGoogle(role);
       await safeRedirect(user);
     } catch (e) {
+      manualSignIn = false;
       showAuthMsg(friendlyAuthError(e), "error");
     }
   });
@@ -277,10 +303,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       setLoading(true);
+      manualSignIn = true;
 
       const remember = Boolean(rememberEl?.checked);
       await setRemember(remember);
-      localStorage.setItem("autoLogin", remember);
+      try { localStorage.setItem("autoLogin", remember); } catch {}
 
       // signup
       if (mode === "signup") {
@@ -311,6 +338,7 @@ document.addEventListener("DOMContentLoaded", () => {
       await safeRedirect(user);
 
     } catch (err) {
+      manualSignIn = false;
       showAuthMsg(friendlyAuthError(err), "error");
     } finally {
       setLoading(false);

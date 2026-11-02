@@ -31,8 +31,8 @@
 
       <div>
         <h4>Legal</h4>
-        <a href="#">Privacy</a>
-        <a href="#">Terms</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="terms.html">Terms</a>
       </div>
     </div>
 

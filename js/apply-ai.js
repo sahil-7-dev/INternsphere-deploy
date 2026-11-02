@@ -20,15 +20,19 @@ function escapeHtml(s) {
 
 function getInternshipCtx() {
   const base = window.__internship || {};
+  // .hero-meta values are [location, duration, stipend] (see
+  // internship-details.js); prefer the structured copy on window.__internship.
+  const meta = document.querySelectorAll(".hero-meta .meta-value");
+  const str = (v) => (v == null ? "" : String(v).trim());
   return {
     id: base.id || "",
     title: base.title || "",
     companyName: base.companyName || "",
-    description: document.querySelector(".hero-subtitle")?.textContent?.trim() || "",
-    location: document.querySelectorAll(".hero-meta .meta-value")?.[1]?.textContent?.trim() || "",
-    stipend: document.querySelectorAll(".hero-meta .meta-value")?.[2]?.textContent?.trim() || "",
-    duration: document.querySelectorAll(".mini-grid .mini-value")?.[1]?.textContent?.trim() || "",
-    department: document.querySelectorAll(".hero-meta .meta-value")?.[0]?.textContent?.trim() || "",
+    description: str(base.description) || document.querySelector(".hero-subtitle")?.textContent?.trim() || "",
+    location: str(base.location) || meta[0]?.textContent?.trim() || "",
+    stipend: str(base.stipend) || meta[2]?.textContent?.trim() || "",
+    duration: str(base.duration) || meta[1]?.textContent?.trim() || "",
+    department: str(base.department),
   };
 }
 
@@ -53,7 +57,8 @@ function studentContextBlock() {
     p.major && `Major: ${p.major}`,
     p.location && `Location: ${p.location}`,
     p.bio && `Bio: ${p.bio}`,
-    p.skills?.length && `Skills: ${p.skills.join(", ")}`,
+    Array.isArray(p.skills) && p.skills.length && `Skills: ${p.skills.join(", ")}`,
+    typeof p.skills === "string" && p.skills.trim() && `Skills: ${p.skills.trim()}`,
     p.linkedin && `LinkedIn: ${p.linkedin}`,
     p.github && `GitHub: ${p.github}`,
   ].filter(Boolean).join("\n");
@@ -90,6 +95,15 @@ async function runCvFeedback() {
     showError(panel, "Attach a PDF CV first, then click this again.");
     return;
   }
+  if (!(file.type === "application/pdf" || /\.pdf$/i.test(file.name))) {
+    showError(panel, "AI feedback only works with PDF files.");
+    return;
+  }
+  // The AI proxy rejects large bodies (base64 adds ~33%).
+  if (file.size > 3 * 1024 * 1024) {
+    showError(panel, "That PDF is too large for AI review. Try one under 3 MB.");
+    return;
+  }
 
   btn.disabled = true;
   showLoading(panel, "Reviewing your CV for this role…");
@@ -106,12 +120,13 @@ async function runCvFeedback() {
       temperature: 0.4,
     });
 
-    const scoreColor = data.fitScore >= 75 ? "#22c55e" : data.fitScore >= 50 ? "#f59e0b" : "#ef4444";
-    const scoreBg = data.fitScore >= 75 ? "rgba(34,197,94,0.15)" : data.fitScore >= 50 ? "rgba(245,158,11,0.15)" : "rgba(239,68,68,0.15)";
+    const fitScore = Math.max(0, Math.min(100, Math.round(Number(data?.fitScore) || 0)));
+    const scoreColor = fitScore >= 75 ? "#22c55e" : fitScore >= 50 ? "#f59e0b" : "#ef4444";
+    const scoreBg = fitScore >= 75 ? "rgba(34,197,94,0.15)" : fitScore >= 50 ? "rgba(245,158,11,0.15)" : "rgba(239,68,68,0.15)";
 
     panel.innerHTML = `
       <h5>✦ CV review
-        <span class="ai-score" style="background:${scoreBg};color:${scoreColor};border-color:${scoreColor}55">${data.fitScore}/100</span>
+        <span class="ai-score" style="background:${scoreBg};color:${scoreColor};border-color:${scoreColor}55">${fitScore}/100</span>
       </h5>
       <p><strong>Verdict:</strong> ${escapeHtml(data.verdict)}</p>
       ${listBlock("Strengths", data.strengths)}
@@ -127,7 +142,7 @@ async function runCvFeedback() {
 }
 
 function listBlock(label, items) {
-  if (!items?.length) return "";
+  if (!Array.isArray(items) || !items.length) return "";
   return `<p style="margin:10px 0 2px"><strong>${escapeHtml(label)}</strong></p><ul>${items.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>`;
 }
 

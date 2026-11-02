@@ -8,6 +8,21 @@ function guestRole() {
   try { return sessionStorage.getItem("guestRole") || ""; } catch { return ""; }
 }
 
+// An anonymous session without the guest flag is a leftover from an earlier
+// guest preview (Firebase persists it, sessionStorage doesn't). It has no
+// users/{uid} doc, so treating it like a real account showed a misleading
+// "This account no longer exists" alert. Sign it out quietly instead.
+async function dropStaleGuest(user, redirectTo) {
+  if (!user.isAnonymous) return false;
+  try {
+    const { signOut } = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js");
+    await signOut(auth);
+  } catch (_) { }
+  const next = encodeURIComponent(window.location.pathname + window.location.search);
+  window.location.href = `${redirectTo}?next=${next}`;
+  return true;
+}
+
 export function requireAuth(redirectTo = "login.html") {
   if (guestRole()) return;
   onAuthStateChanged(auth, async (user) => {
@@ -16,6 +31,7 @@ export function requireAuth(redirectTo = "login.html") {
       window.location.href = `${redirectTo}?next=${next}`;
       return;
     }
+    if (await dropStaleGuest(user, redirectTo)) return;
     try {
       const u = await getDoc(doc(db, "users", user.uid));
       if (!u.exists()) {
@@ -71,6 +87,7 @@ export function requireRole(allowedRoles) {
       window.location.href = `login.html?next=${next}`;
       return;
     }
+    if (await dropStaleGuest(user, "login.html")) return;
     try {
       const u = await getDoc(doc(db, "users", user.uid));
       if (!u.exists()) {

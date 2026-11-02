@@ -46,7 +46,12 @@ function setText(sel, text) {
 }
 
 const params = new URLSearchParams(window.location.search);
-const id = params.get("id");
+const rawId = (params.get("id") || "").trim();
+// Firestore doc ids can't contain "/" (doc() throws) and are capped at
+// 1500 bytes — treat anything else as a missing id.
+const id = rawId && !rawId.includes("/") && rawId !== "." && rawId !== ".." && rawId.length <= 1500
+  ? rawId
+  : null;
 
 if (!id) {
   window.location.href = "internshipdetails.html";
@@ -89,7 +94,10 @@ async function loadInternship() {
     if (imgEl) imgEl.src = heroImage;
   }
 
-  window.__internship = { id, title, companyName: companyNm };
+  window.__internship = {
+    id, title, companyName: companyNm,
+    location, duration, department, stipend, description: desc,
+  };
 
   const skills = Array.isArray(d.skills)
     ? d.skills
@@ -354,7 +362,12 @@ const uploadBox = document.getElementById("uploadBox");
 const cvMain = document.getElementById("cvMain");
 const cvSub = document.getElementById("cvSub");
 
-const CV_MAX_BYTES = 5 * 1024 * 1024;
+// The CV is stored inline as a base64 data URL on the application doc.
+// Base64 inflates by 4/3 and Firestore caps a document at 1 MiB, so
+// anything much over ~750 KB fails on write. 700 KB leaves headroom for
+// the other fields.
+const CV_MAX_BYTES = 700 * 1024;
+const CV_MAX_LABEL = "700 KB";
 
 if (uploadBox && cvInput) {
   const pickFile = () => cvInput.click();
@@ -378,7 +391,7 @@ if (uploadBox && cvInput) {
     }
     if (file.size > CV_MAX_BYTES) {
       alert(
-        `That PDF is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max is 5 MB. Try compressing it.`,
+        `That PDF is too large (${(file.size / 1024).toFixed(0)} KB). Max is ${CV_MAX_LABEL}. Try compressing it.`,
       );
       cvInput.value = "";
       return false;
@@ -423,9 +436,12 @@ function readAsDataURL(file) {
   });
 }
 
+let applySubmitting = false;
+
 if (applyForm) {
   applyForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (applySubmitting) return;
 
     const user = auth.currentUser;
     if (!user) {
@@ -433,9 +449,17 @@ if (applyForm) {
       return;
     }
 
-    const internshipId = new URLSearchParams(window.location.search).get("id");
+    const internshipId = id;
     if (!internshipId) {
       alert("Internship ID missing.");
+      return;
+    }
+
+    const nameVal  = (document.getElementById("name")?.value  || "").trim();
+    const emailVal = (document.getElementById("email")?.value || "").trim();
+    const phoneVal = (document.getElementById("phone")?.value || "").trim();
+    if (!nameVal || !emailVal || !phoneVal) {
+      alert("Please fill in your name, email and phone.");
       return;
     }
 
@@ -453,7 +477,7 @@ if (applyForm) {
       return;
     }
     if (file.size > CV_MAX_BYTES) {
-      alert("CV too large. Max 5 MB.");
+      alert(`CV too large. Max ${CV_MAX_LABEL}.`);
       return;
     }
 
@@ -464,6 +488,8 @@ if (applyForm) {
       submitBtn.textContent = "Submitting…";
     }
 
+    applySubmitting = true;
+    let submitted = false;
     try {
       const intSnap = await getDoc(doc(db, "internships", internshipId));
       if (!intSnap.exists()) {
@@ -471,6 +497,31 @@ if (applyForm) {
         return;
       }
       const internship = intSnap.data();
+
+      if (internship.status && internship.status !== "Open") {
+        alert("This internship is no longer accepting applications.");
+        return;
+      }
+      if (internship.deadline) {
+        const dl = new Date(internship.deadline + "T23:59:59");
+        if (!isNaN(dl.getTime()) && dl.getTime() < Date.now()) {
+          alert("Applications for this internship have closed.");
+          return;
+        }
+      }
+
+      // Server-side duplicate check — the live status listener may not have
+      // fired yet (slow network / second tab), so don't rely on UI state alone.
+      const existingSnap = await getDocs(query(
+        collection(db, "applications"),
+        where("studentId", "==", user.uid),
+        where("internshipId", "==", internshipId),
+      ));
+      const active = existingSnap.docs.find((d) => (d.data().status || "Pending") !== "Rejected");
+      if (active) {
+        alert("You've already applied to this internship.");
+        return;
+      }
 
       if (submitBtn) submitBtn.textContent = "Reading CV…";
       const cvDataUrl = await readAsDataURL(file);
@@ -483,11 +534,11 @@ if (applyForm) {
       await addDoc(collection(db, "applications"), {
         studentId: user.uid,
         internshipId: internshipId,
-        companyId: internship.companyId,
-        role: internship.title,
-        name: document.getElementById("name")?.value?.trim() || "",
-        email: document.getElementById("email").value,
-        phone: document.getElementById("phone").value,
+        companyId: internship.companyId || "",
+        role: internship.title || "",
+        name: nameVal,
+        email: emailVal,
+        phone: phoneVal,
         cvName: file.name,
         cvSize: file.size,
         cvUrl,
@@ -497,10 +548,11 @@ if (applyForm) {
         appliedAt: new Date().toLocaleString(),
         appliedAtMs: Date.now(),
       });
+      submitted = true;
 
       applyForm.reset();
       if (cvMain) cvMain.textContent = "Click or drop your PDF CV";
-      if (cvSub) cvSub.textContent = "PDF up to 5 MB";
+      if (cvSub) cvSub.textContent = `PDF up to ${CV_MAX_LABEL}`;
       uploadBox?.classList.remove("has-file");
 
       if (typeof window.playSubmitChime === "function") window.playSubmitChime();
@@ -509,9 +561,14 @@ if (applyForm) {
       console.error(err);
       alert("Application failed: " + (err?.message || err));
     } finally {
-      if (submitBtn) {
+      applySubmitting = false;
+      // On success the status listener has already locked the form and set
+      // the button to "Already applied" — don't clobber that.
+      if (submitBtn && !submitted) {
         submitBtn.disabled = false;
         submitBtn.textContent = submitBtn.dataset._label || "Submit";
+      } else if (submitBtn && submitBtn.textContent === "Submitting…") {
+        submitBtn.textContent = "Already applied";
       }
     }
   });
@@ -542,7 +599,7 @@ document.addEventListener("keydown", (e) => {
 // already-applied detection
 
 (function setupApplicationStatusCheck() {
-  const internshipId = new URLSearchParams(window.location.search).get("id");
+  const internshipId = id;
   if (!internshipId) return;
 
   const banner = document.getElementById("applyStatusBanner");
@@ -628,7 +685,9 @@ document.addEventListener("keydown", (e) => {
     }
   }
 
+  let unsubStatus = null;
   onAuthStateChanged(auth, (user) => {
+    if (unsubStatus) { unsubStatus(); unsubStatus = null; }
     if (!user) {
       renderStatus(null);
       return;
@@ -638,7 +697,7 @@ document.addEventListener("keydown", (e) => {
       where("studentId", "==", user.uid),
       where("internshipId", "==", internshipId),
     );
-    onSnapshot(
+    unsubStatus = onSnapshot(
       q,
       (snap) => {
         if (snap.empty) {

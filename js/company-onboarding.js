@@ -340,7 +340,10 @@ function wireProfileModal() {
       return;
     }
     try {
-      const dataUrl = await readFileAsDataUrl(file);
+      // The logo is stored inline on companies/{uid}; a raw multi-MB data URL
+      // exceeds Firestore's 1 MiB document limit (save fails) and bloats every
+      // read of the company doc. Downscale to a small avatar first.
+      const dataUrl = await downscaleImageToDataUrl(file, 256);
       cpPendingLogo = dataUrl;
       renderLogoPreview(dataUrl, $("cpName").value || companyData?.companyName || "");
     } catch (err) {
@@ -363,6 +366,30 @@ function readFileAsDataUrl(file) {
     r.onerror = () => reject(r.error);
     r.readAsDataURL(file);
   });
+}
+
+async function downscaleImageToDataUrl(file, maxSide) {
+  const src = await readFileAsDataUrl(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = src;
+    });
+    const scale = Math.min(1, maxSide / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+    const w = Math.max(1, Math.round((img.naturalWidth || 1) * scale));
+    const h = Math.max(1, Math.round((img.naturalHeight || 1) * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    let out = canvas.toDataURL("image/webp", 0.85);
+    if (!out.startsWith("data:image/webp")) out = canvas.toDataURL("image/png");
+    return out.length < src.length ? out : src;
+  } catch {
+    return src;
+  }
 }
 
 function renderLogoPreview(dataUrl, name) {
@@ -465,15 +492,12 @@ function closeProfileModal() {
 async function loadQuickStats() {
   if (!currentUid) return;
   try {
-    const intsSnap = await getDocs(
-      query(collection(db, "internships"), where("companyId", "==", currentUid)),
-    );
-    const roles = intsSnap.size;
+    // Both reads in parallel instead of back to back.
+    const [intsSnap, appsSnap] = await Promise.all([
+      getDocs(query(collection(db, "internships"), where("companyId", "==", currentUid))),
+      getDocs(query(collection(db, "applications"), where("companyId", "==", currentUid))),
+    ]);
     const openRoles = intsSnap.docs.filter((d) => (d.data().status || "Open") === "Open").length;
-
-    const appsSnap = await getDocs(
-      query(collection(db, "applications"), where("companyId", "==", currentUid)),
-    );
     const apps = appsSnap.size;
 
     $("cpStatRoles").textContent = openRoles;

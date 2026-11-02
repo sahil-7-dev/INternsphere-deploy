@@ -3,7 +3,6 @@
 import { auth, db } from "../firebase/firebase.js";
 import {
   collection,
-  addDoc,
   getDoc,
   getDocs,
   query,
@@ -12,8 +11,8 @@ import {
   deleteDoc,
   updateDoc,
   serverTimestamp,
-  orderBy,
   onSnapshot,
+  writeBatch,
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 import { esc } from "./lib/escape.js";
@@ -29,13 +28,28 @@ const TASKS_PER_PAGE = 9;
 
 function $(id) { return document.getElementById(id); }
 
+// Only allow link targets that can't run script when clicked.
+function safeHref(url) {
+  const u = String(url || "").trim();
+  if (/^(https?:|blob:)/i.test(u)) return u;
+  if (/^data:application\/pdf[;,]/i.test(u)) return u;
+  return "";
+}
+
+// studentId -> display name, shared across snapshots / modal opens.
+const studentNameCache = new Map();
+
 // --------- Internship select ------------
 async function loadInternshipsForTasks(userUid) {
-  const q = query(collection(db, "internships"), where("companyId", "==", userUid));
-  const snap = await getDocs(q);
-  internshipsForTasks = [];
-  snap.forEach((d) => internshipsForTasks.push({ id: d.id, ...d.data() }));
-  renderInternshipSelect();
+  try {
+    const q = query(collection(db, "internships"), where("companyId", "==", userUid));
+    const snap = await getDocs(q);
+    internshipsForTasks = [];
+    snap.forEach((d) => internshipsForTasks.push({ id: d.id, ...d.data() }));
+    renderInternshipSelect();
+  } catch (e) {
+    console.error("[company-tasks] load internships failed:", e);
+  }
 }
 
 function renderInternshipSelect() {
@@ -44,8 +58,18 @@ function renderInternshipSelect() {
   sel.innerHTML =
     '<option value="">— Select internship —</option>' +
     internshipsForTasks
-      .map((i) => `<option value="${i.id}">${esc(i.title)}</option>`)
+      .map((i) => `<option value="${esc(i.id)}">${esc(i.title)}</option>`)
       .join("");
+  // Re-rendering the <select> used to reset it to the placeholder while the
+  // previously selected internship's tasks stayed on screen. Keep the selection.
+  if (selectedInternshipId && internshipsForTasks.some((i) => i.id === selectedInternshipId)) {
+    sel.value = selectedInternshipId;
+  } else if (selectedInternshipId) {
+    selectedInternshipId = "";
+    const btn = $("open-task-modal-btn");
+    if (btn) btn.disabled = true;
+    subscribeTasks();
+  }
 }
 
 // --------- Tasks list ---------
@@ -102,13 +126,13 @@ function renderTasks() {
         ? 'background:linear-gradient(135deg,#ec4899,#f59e0b);'
         : 'background:linear-gradient(135deg,#7c6bff,#a855f7);';
       return `
-        <div class="app-card task-card" data-id="${t.id}" style="${finalRingStyle}">
+        <div class="app-card task-card" data-id="${esc(t.id)}" style="${finalRingStyle}">
           <div class="ac-top">
             <div class="ac-left">
-              <div class="ac-avatar" style="${avatarGradient}color:#fff">${t.isFinal ? "🏁" : (t.order || 1)}</div>
+              <div class="ac-avatar" style="${avatarGradient}color:#fff">${t.isFinal ? "🏁" : esc(t.order || 1)}</div>
               <div class="ac-left-text">
                 <div class="ac-name">${esc(t.title)}</div>
-                <div class="ac-role">${esc(t.description || "No description").slice(0, 80)}${(t.description || "").length > 80 ? "…" : ""}</div>
+                <div class="ac-role">${esc(String(t.description || "No description").slice(0, 80))}${(t.description || "").length > 80 ? "…" : ""}</div>
               </div>
             </div>
             <div class="ac-tags">
@@ -146,7 +170,7 @@ function renderTasks() {
 }
 
 function subscribeTasks() {
-  if (tasksUnsub) tasksUnsub();
+  if (tasksUnsub) { tasksUnsub(); tasksUnsub = null; }
   tasksCache = [];
   if (!selectedInternshipId) {
     renderTasks();
@@ -161,6 +185,8 @@ function subscribeTasks() {
     tasksCache = [];
     snap.forEach((d) => tasksCache.push({ id: d.id, ...d.data() }));
     renderTasks();
+  }, (err) => {
+    console.error("[company-tasks] tasks listener failed:", err);
   });
 }
 
@@ -232,19 +258,17 @@ async function saveTask() {
   }
 
   try {
+    // One atomic batch: previously the other tasks were un-marked as final
+    // first, so a failed save left the internship with no final task.
+    const batch = writeBatch(db);
     if (isFinal) {
-      const others = tasksCache.filter(
-        (t) => t.isFinal && t.id !== editingTaskId,
-      );
-      await Promise.all(
-        others.map((t) =>
-          updateDoc(doc(db, "tasks", t.id), { isFinal: false }),
-        ),
-      );
+      tasksCache
+        .filter((t) => t.isFinal && t.id !== editingTaskId)
+        .forEach((t) => batch.update(doc(db, "tasks", t.id), { isFinal: false }));
     }
 
     if (editingTaskId) {
-      await updateDoc(doc(db, "tasks", editingTaskId), {
+      batch.update(doc(db, "tasks", editingTaskId), {
         title,
         description,
         dueDate,
@@ -253,11 +277,12 @@ async function saveTask() {
         isFinal,
       });
     } else {
-      await addDoc(collection(db, "tasks"), {
+      batch.set(doc(collection(db, "tasks")), {
         ...payload,
         createdAt: serverTimestamp(),
       });
     }
+    await batch.commit();
     closeTaskModal();
   } catch (e) {
     console.error("[company-tasks] Save failed:", e);
@@ -367,6 +392,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 let reviewingSub = null;
 let subsUnsub = null;
+let subsToken = 0;
 
 async function openSubmissions(task) {
   reviewingSub = null;
@@ -379,8 +405,10 @@ async function openSubmissions(task) {
   if (!modal || !list) return;
   modal.classList.remove("hidden");
   list.innerHTML = '<p style="text-align:center;padding:24px;color:#8a95a3">Loading…</p>';
+  if (empty) empty.style.display = "none";
 
-  if (subsUnsub) subsUnsub();
+  if (subsUnsub) { subsUnsub(); subsUnsub = null; }
+  const token = ++subsToken;
 
   const user = auth.currentUser;
   if (!user) return;
@@ -399,37 +427,37 @@ async function openSubmissions(task) {
     }
     if (empty) empty.style.display = "none";
 
-    const nameCache = {};
+    // Fetch each *unique, uncached* student once (previously every snapshot
+    // re-read every student doc, including duplicates).
+    const missing = [...new Set(subs.map((s) => s.studentId).filter(Boolean))]
+      .filter((id) => !studentNameCache.has(id));
     await Promise.all(
-      subs.map(async (s) => {
-        if (!nameCache[s.studentId]) {
-          try {
-            const sd = await getDoc(doc(db, "students", s.studentId));
-            if (sd.exists()) {
-              const d = sd.data();
-              nameCache[s.studentId] = d.name || d.email || s.studentId;
-            } else {
-              nameCache[s.studentId] = s.studentId;
-            }
-          } catch {
-            nameCache[s.studentId] = s.studentId;
-          }
+      missing.map(async (id) => {
+        try {
+          const sd = await getDoc(doc(db, "students", id));
+          const d = sd.exists() ? sd.data() : {};
+          studentNameCache.set(id, d.name || d.email || id);
+        } catch {
+          studentNameCache.set(id, id);
         }
       }),
     );
+    // Modal closed or another task opened while we were awaiting.
+    if (token !== subsToken) return;
+    const nameCache = Object.fromEntries(studentNameCache);
 
     list.innerHTML = subs
       .map((s) => {
-        const name = nameCache[s.studentId] || s.studentId;
+        const name = nameCache[s.studentId] || s.studentId || "";
         const reviewed = s.feedback && typeof s.feedback.score === "number";
         const status = reviewed
           ? `<span class="badge ${s.feedback.status === "rejected" ? "rejected" : "approved"}">Reviewed · ${s.feedback.score}/100</span>`
           : `<span class="badge pending">Pending review</span>`;
         return `
-          <div class="app-card" data-sub-id="${s.id}">
+          <div class="app-card" data-sub-id="${esc(s.id)}">
             <div class="ac-top">
               <div class="ac-left">
-                <div class="ac-avatar">${(name || "?").slice(0, 2).toUpperCase()}</div>
+                <div class="ac-avatar">${esc((name || "?").slice(0, 2).toUpperCase())}</div>
                 <div>
                   <div class="ac-name">${esc(name)}</div>
                   <div class="ac-role">Submitted · ${s.submittedAt?.toDate ? s.submittedAt.toDate().toLocaleString() : ""}</div>
@@ -438,7 +466,7 @@ async function openSubmissions(task) {
               ${status}
             </div>
             <div class="ac-actions">
-              <button class="btn-approve" data-review="${s.id}">${reviewed ? "Update Review" : "Review"}</button>
+              <button class="btn-approve" data-review="${esc(s.id)}">${reviewed ? "Update Review" : "Review"}</button>
             </div>
           </div>`;
       })
@@ -451,11 +479,16 @@ async function openSubmissions(task) {
         if (sub) openReview(sub, nameCache[sub.studentId]);
       });
     });
+  }, (err) => {
+    console.error("[company-tasks] submissions listener failed:", err);
+    if (token !== subsToken) return;
+    list.innerHTML = '<p style="text-align:center;padding:24px;color:#ef4444">Could not load submissions.</p>';
   });
 }
 
 function closeSubmissions() {
   $("submissions-modal")?.classList.add("hidden");
+  subsToken++;
   if (subsUnsub) { subsUnsub(); subsUnsub = null; }
 }
 
@@ -484,9 +517,10 @@ function openReview(sub, studentName) {
   // PDF row
   const pdfRow = $("review-pdf-row");
   const pdfLink = $("review-pdf-link");
-  if (sub.pdfData && pdfRow && pdfLink) {
+  const pdfHref = safeHref(sub.pdfData);
+  if (pdfHref && pdfRow && pdfLink) {
     pdfRow.style.display = "";
-    pdfLink.href = sub.pdfData;
+    pdfLink.href = pdfHref;
     pdfLink.setAttribute("download", sub.pdfName || "submission.pdf");
     pdfLink.textContent = `Download ${sub.pdfName || "submission.pdf"}`;
   } else if (pdfRow) {

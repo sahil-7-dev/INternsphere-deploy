@@ -6,7 +6,7 @@
 
 import { auth, db } from "../firebase/firebase.js";
 import {
-  doc, collection, query, where, limit, getDocs, onSnapshot,
+  doc, getDoc, collection, query, where, limit, getDocs, onSnapshot,
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 import { rebuildUserSkillSet, computeMatch } from "./lib/match.js";
@@ -25,7 +25,6 @@ async function fetchLogo(companyId) {
   if (!companyId) return "";
   if (companyLogoCache.has(companyId)) return companyLogoCache.get(companyId);
   try {
-    const { getDoc } = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js");
     const snap = await getDoc(doc(db, "companies", companyId));
     const logo = snap.exists() ? (snap.data().logo || "") : "";
     companyLogoCache.set(companyId, logo);
@@ -67,34 +66,51 @@ function renderCard(internship) {
     </a>`;
 }
 
-async function loadRecommendations(uid) {
+// Internship skills are stored as a comma-separated string by the company
+// dashboard (older docs may use an array). Normalise to an array so
+// computeMatch / renderCard don't iterate characters or call .map on a string.
+function toSkillArray(v) {
+  if (Array.isArray(v)) return v.map((s) => String(s).trim()).filter(Boolean);
+  if (typeof v === "string") return v.split(",").map((s) => s.trim()).filter(Boolean);
+  return [];
+}
+
+// Open internships rarely change within a session — fetch once and re-score
+// locally whenever the student's skill profile changes.
+let _openInternshipsPromise = null;
+function getOpenInternships() {
+  if (!_openInternshipsPromise) {
+    // Company dashboard writes status "Open"; accept legacy lowercase too.
+    _openInternshipsPromise = getDocs(query(
+      collection(db, "internships"),
+      where("status", "in", ["Open", "open"]),
+      limit(80),
+    )).catch((e) => { _openInternshipsPromise = null; throw e; });
+  }
+  return _openInternshipsPromise;
+}
+
+async function loadRecommendations(studentData) {
   const card = $("recommendedCard");
   const list = $("recommendedList");
   const foot = $("recommendedFoot");
   if (!card || !list) return;
 
   try {
-    // 1. Load student skill profile
-    const { getDoc } = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js");
-    const sSnap = await getDoc(doc(db, "students", uid));
-    if (!sSnap.exists()) return;
-    const studentData = sSnap.data();
+    // 1. Student skill profile (passed in from the students/{uid} snapshot)
+    if (!studentData) return;
     const skillSet = rebuildUserSkillSet(studentData);
 
     // No skills at all — hide the panel
     if (!skillSet.size) { card.style.display = "none"; return; }
 
     // 2. Load open internships
-    const snap = await getDocs(query(
-      collection(db, "internships"),
-      where("status", "==", "open"),
-      limit(80),
-    ));
+    const snap = await getOpenInternships();
 
     const scored = [];
     snap.forEach((d) => {
       const data = d.data();
-      const jobSkills = data.skills || data.requiredSkills || [];
+      const jobSkills = toSkillArray(data.skills || data.requiredSkills);
       const score = computeMatch(jobSkills, skillSet);
       // Only surface roles where we can actually compute a score (student has matching skill data)
       scored.push({
@@ -139,15 +155,22 @@ async function loadRecommendations(uid) {
 }
 
 function init() {
+  let currentUid = null;
+  let unsubStudent = null;
   onAuthStateChanged(auth, (user) => {
-    if (!user) return;
+    if (!user) {
+      unsubStudent?.(); unsubStudent = null; currentUid = null;
+      return;
+    }
+    if (user.uid === currentUid) return;
+    currentUid = user.uid;
+    unsubStudent?.();
 
-    // Initial load
-    loadRecommendations(user.uid);
-
-    // Re-fire whenever the student doc changes (new CV upload updates detectedSkills)
-    onSnapshot(doc(db, "students", user.uid), () => {
-      loadRecommendations(user.uid);
+    // The snapshot fires immediately with the current doc (initial load) and
+    // again whenever it changes (new CV upload updates detectedSkills), so
+    // no separate getDoc is needed.
+    unsubStudent = onSnapshot(doc(db, "students", user.uid), (sSnap) => {
+      if (sSnap.exists()) loadRecommendations(sSnap.data());
     }, () => { /* ignore errors — non-critical */ });
   });
 }

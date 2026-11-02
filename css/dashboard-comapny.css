@@ -1,5 +1,6 @@
 
-@import url("https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap");
+/* Fonts (Sora / Geist Mono) are loaded via <link> in dashboard-company.html
+   and admin.html; a duplicate @import here was a render-blocking chained request. */
 
 /* ===== tokens ===== */
 :root {

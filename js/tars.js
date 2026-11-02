@@ -66,8 +66,12 @@ let chat = null;
 let ctx = {};
 let currentUid = null;
 
+const CTX_TTL_MS = 30 * 1000;
+let ctxLoadedAt = 0;
+
 // context loaders
 async function loadContext(user) {
+  ctxLoadedAt = Date.now();
   ctx = { name: user.displayName || "" };
 
   try {
@@ -187,8 +191,10 @@ async function sendMessage(text) {
   const clean = (text || "").trim();
   if (!clean) return;
 
-  // Refresh context before every message so TARS always has live data
-  if (auth.currentUser) {
+  // Refresh context before a message so TARS has live data — but at most
+  // every CTX_TTL_MS; loadContext costs ~5 Firestore reads, so rapid-fire
+  // messages shouldn't each trigger a full refetch.
+  if (auth.currentUser && Date.now() - ctxLoadedAt > CTX_TTL_MS) {
     await loadContext(auth.currentUser).catch(() => {});
     // Rebuild chat with fresh system prompt (keeps history intact)
     const history = chat ? chat.history : loadHistory(currentUid);
@@ -426,6 +432,7 @@ function init() {
       currentUid = null;
       chat = null;
       ctx = {};
+      ctxLoadedAt = 0;
       return;
     }
 

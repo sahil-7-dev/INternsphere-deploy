@@ -12,7 +12,9 @@
     const internshipCompany = String(cfg.internshipCompany || "").trim();
     const btn               = cfg.buttonEl || null;
 
-    const origLabel = btn ? btn.textContent : "";
+    // Keep the button's markup (dashboard uses icon + label spans) so the
+    // reset doesn't flatten it to plain text.
+    const origHTML = btn ? btn.innerHTML : "";
     if (btn) { btn.disabled = true; btn.textContent = "Preparing…"; }
 
     // Landscape format keeps the certificate frame-able. Slightly taller
@@ -237,12 +239,18 @@
     function resetBtn() {
       if (!btn) return;
       btn.disabled = false;
-      btn.textContent = origLabel || "⬇ Download Certificate";
+      if (origHTML) btn.innerHTML = origHTML;
+      else btn.textContent = "⬇ Download Certificate";
+    }
+
+    // Never leave the button stuck on "Preparing…" if rendering throws.
+    function safePaint(img) {
+      try { paint(img); } catch (e) { console.error("[certificate]", e); resetBtn(); }
     }
 
     const logo = new Image();
-    logo.onload  = () => paint(logo);
-    logo.onerror = () => paint(null);
+    logo.onload  = () => safePaint(logo);
+    logo.onerror = () => safePaint(null);
     logo.src = "assets/images/Internsphere logo.png";
   };
 })();

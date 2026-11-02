@@ -25,8 +25,34 @@ import {
   getDownloadURL,
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-storage.js";
 
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
+import {
+  onAuthStateChanged,
+  updatePassword,
+  verifyBeforeUpdateEmail,
+} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 import { esc } from "./lib/escape.js";
+
+// Only allow link targets that can't execute script when clicked
+// (blocks javascript:/vbscript:/data:text/html etc. in student-supplied URLs).
+function safeHref(url) {
+  var u = String(url || "").trim();
+  if (!u) return "";
+  if (/^(https?:|blob:)/i.test(u)) return u;
+  if (/^data:application\/pdf[;,]/i.test(u)) return u;
+  return "";
+}
+
+// Coalesce repeated render requests (several snapshots firing back to back)
+// into a single render per animation frame.
+var _queuedRenders = {};
+function scheduleRender(key, fn) {
+  if (_queuedRenders[key]) return;
+  _queuedRenders[key] = true;
+  requestAnimationFrame(function () {
+    _queuedRenders[key] = false;
+    fn();
+  });
+}
 
 function parseBullets(raw) {
   return String(raw || "")
@@ -233,13 +259,16 @@ function openShortlistModal(app) {
   modal.querySelector(".sl-cancel").addEventListener("click", close);
   modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
 
-  modal.querySelector(".sl-submit").addEventListener("click", async () => {
+  const slSubmit = modal.querySelector(".sl-submit");
+  slSubmit.addEventListener("click", async () => {
     const when = document.getElementById("slWhen").value;
     const details = document.getElementById("slDetails").value.trim();
     if (!when) {
       alert("Please pick an interview date and time.");
       return;
     }
+    if (slSubmit.disabled) return;
+    slSubmit.disabled = true;
     await submitShortlist(app, when, details);
     close();
   });
@@ -247,17 +276,32 @@ function openShortlistModal(app) {
 
 async function sendNotification(appId, newStatus, extraReason) {
   try {
-    const appSnap = await getDoc(doc(db, "applications", appId));
-    if (!appSnap.exists()) return;
-    const appData = appSnap.data();
+    // Prefer the live caches (applications / internships / company doc are all
+    // already loaded or live-watched) instead of 3 sequential reads per action.
+    let appData = appsCache.find((a) => a.id === appId);
+    if (!appData) {
+      const appSnap = await getDoc(doc(db, "applications", appId));
+      if (!appSnap.exists()) return;
+      appData = appSnap.data();
+    }
 
-    const intSnap = await getDoc(doc(db, "internships", appData.internshipId));
-    const internshipTitle = intSnap.exists() ? intSnap.data().title : "the internship";
-
-    const coSnap = await getDoc(doc(db, "companies", appData.companyId));
-    const companyName = coSnap.exists()
-      ? (coSnap.data().companyName || coSnap.data().name || "the company")
-      : "the company";
+    const cachedInt = internshipsCache.find((i) => i.id === appData.internshipId);
+    const [internshipTitle, companyName] = await Promise.all([
+      cachedInt
+        ? (cachedInt.title || "the internship")
+        : (appData.internshipId
+            ? getDoc(doc(db, "internships", appData.internshipId))
+                .then((s) => (s.exists() && s.data().title) || "the internship")
+                .catch(() => "the internship")
+            : "the internship"),
+      (companyDocCache && appData.companyId === auth.currentUser?.uid)
+        ? (companyDocCache.companyName || companyDocCache.name || "the company")
+        : getDoc(doc(db, "companies", appData.companyId))
+            .then((s) => s.exists()
+              ? (s.data().companyName || s.data().name || "the company")
+              : "the company")
+            .catch(() => "the company"),
+    ]);
 
     const reason = String(extraReason || "").trim();
     const rejectMsg = reason
@@ -319,7 +363,10 @@ function openRejectModal(app, clearFields) {
   modal.querySelector(".rj-cancel").addEventListener("click", close);
   modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
 
-  modal.querySelector(".rj-submit").addEventListener("click", async () => {
+  const rjSubmit = modal.querySelector(".rj-submit");
+  rjSubmit.addEventListener("click", async () => {
+    if (rjSubmit.disabled) return;
+    rjSubmit.disabled = true;
     const reason = document.getElementById("rejectReason").value.trim();
     try {
       await updateDoc(doc(db, "applications", app.id), {
@@ -350,23 +397,40 @@ var APPS_PER_PAGE    = 9;
 var filteredCount    = 0;
 var intCurrentPage   = 1;
 var INT_PER_PAGE     = 9;
+var internshipsLoaded = false;
+var companyDocCache  = null;      // live copy of companies/{uid}
 
 // theme
 (function () {
   var KEY = "internsphere_theme";
+  // Read with the same precedence as the <head> bootstrap script so the
+  // body classes never disagree with the html classes it already set.
+  function storedTheme() {
+    try { return localStorage.getItem("theme") || localStorage.getItem(KEY) || "dark"; }
+    catch (e) { return "dark"; }
+  }
   function applyTheme(t) {
     var light = t === "light";
     document.body.classList.toggle("light", light);
+    document.body.classList.toggle("theme-light", light);
+    document.body.classList.toggle("theme-dark", !light);
     var h = document.documentElement;
+    h.classList.toggle("light", light);
+    h.classList.toggle("theme-light", light);
+    h.classList.toggle("dark", !light);
+    h.classList.toggle("theme-dark", !light);
     h.style.colorScheme = light ? "light" : "dark";
     h.style.backgroundColor = light ? "#f4f6fa" : "#080b10";
-    localStorage.setItem(KEY, light ? "light" : "dark");
+    try {
+      localStorage.setItem(KEY, light ? "light" : "dark");
+      localStorage.setItem("theme", light ? "light" : "dark");
+    } catch (e) {}
     var lbl = document.getElementById("themeLabel");
     if (lbl) lbl.textContent = light ? "Light" : "Dark";
   }
-  applyTheme(localStorage.getItem(KEY) || "dark");
+  applyTheme(storedTheme());
   document.addEventListener("DOMContentLoaded", function () {
-    applyTheme(localStorage.getItem(KEY) || "dark");
+    applyTheme(storedTheme());
     var btn = document.getElementById("themeToggle");
     if (btn) btn.addEventListener("click", function () {
       applyTheme(document.body.classList.contains("light") ? "dark" : "light");
@@ -403,7 +467,7 @@ function applicantAvatarHtml(app, opts) {
   var cls = (opts.className || "") + " ap-avatar ap-avatar--" + size;
   if (hasPic) {
     return '<div class="' + cls.trim() + ' has-pic">' +
-             '<img src="' + esc(cached.profilePic) + '" alt="' + esc(cached.name || app.email || "") + '">' +
+             '<img src="' + esc(cached.profilePic) + '" alt="' + esc(cached.name || app.email || "") + '" loading="lazy" decoding="async">' +
            '</div>';
   }
   return '<div class="' + cls.trim() + '">' + esc(buildInitials(app, cached)) + '</div>';
@@ -541,7 +605,11 @@ function renderDashboard() {
 
   setText("last-updated", new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
 
-  primeStudents(apps, function () { renderDashboard(); renderApps(); });
+  primeStudents(apps, function () {
+    scheduleRender("dashboard", renderDashboard);
+    scheduleRender("apps", renderApps);
+    scheduleRender("certs", renderCertificatesPanel);
+  });
 
   // recent apps feed
   var feed = document.getElementById("recent-apps-list");
@@ -933,7 +1001,7 @@ function renderApps() {
         '<div class="ac-meta-row">' +
           '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l6 5 6-5"/><rect x="2" y="4" width="12" height="9" rx="1.5"/></svg>' +
           (() => {
-            var cvHref = app.cvUrl || app.cvData;
+            var cvHref = safeHref(app.cvUrl || app.cvData);
             if (!cvHref) return '<span style="opacity:0.55">No CV attached</span>';
             var sizeKb = app.cvSize ? ((app.cvSize / 1024).toFixed(0) + ' KB') : '';
             if (app.cvSize && app.cvSize > 1024 * 1024) {
@@ -955,7 +1023,7 @@ function renderApps() {
         : '') +
       '<div class="ac-actions">' +
         '<button class="btn-approve"' + (status === "Approved" ? " disabled" : "") + '>✓ Approve</button>' +
-        '<button class="btn-shortlist">' + (status === "Shortlisted" ? "📅 Reschedule" : "⭐ Shortlist") + '</button>' +
+        '<button class="btn-shortlist"' + (status === "Approved" ? " disabled" : "") + '>' + (status === "Shortlisted" ? "📅 Reschedule" : "⭐ Shortlist") + '</button>' +
         '<button class="btn-reject"'  + (status === "Rejected" ? " disabled" : "") + '>✕ Reject</button>' +
       '</div>';
 
@@ -965,14 +1033,21 @@ function renderApps() {
       interviewTimezone: "",
     };
 
-    card.querySelector(".btn-approve").addEventListener("click", async function () {
+    var approveBtn = card.querySelector(".btn-approve");
+    approveBtn.addEventListener("click", async function () {
+      if (approveBtn.disabled) return;
+      approveBtn.disabled = true;   // guard against double-click → duplicate notifications
       try {
         await updateDoc(doc(db, "applications", app.id), {
           status: "Approved",
           ...clearInterviewFields,
         });
         await sendNotification(app.id, "Approved");
-      } catch (e) { console.error("Failed to approve:", e); }
+      } catch (e) {
+        console.error("Failed to approve:", e);
+        approveBtn.disabled = false;
+        alert("Could not approve — please try again.");
+      }
     });
 
     card.querySelector(".btn-reject").addEventListener("click", function () {
@@ -991,13 +1066,18 @@ function renderApps() {
 async function loadInternships() {
   const user = auth.currentUser;
   if (!user) return;
-  const q    = query(collection(db, "internships"), where("companyId", "==", user.uid));
-  const snap = await getDocs(q);
-  const list = [];
-  snap.forEach(d => list.push({ id: d.id, ...d.data() }));
-  internshipsCache = list;
-  renderInternships(list);
-  renderDashboard();
+  try {
+    const q    = query(collection(db, "internships"), where("companyId", "==", user.uid));
+    const snap = await getDocs(q);
+    const list = [];
+    snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+    internshipsCache = list;
+    internshipsLoaded = true;
+    renderInternships(list);
+    renderDashboard();
+  } catch (e) {
+    console.error("Failed to load internships:", e);
+  }
 }
 
 // ─── Certificates panel ───
@@ -1069,7 +1149,7 @@ function renderCertificatesPanel() {
     const cachedStudent = app.studentId ? studentCache[app.studentId] : null;
     const hasPic = cachedStudent && cachedStudent.profilePic;
     const avatarHtml = hasPic
-      ? '<div class="cert-row__avatar cert-row__avatar--img"><img src="' + esc(cachedStudent.profilePic) + '" alt="' + esc(displayName) + '"></div>'
+      ? '<div class="cert-row__avatar cert-row__avatar--img"><img src="' + esc(cachedStudent.profilePic) + '" alt="' + esc(displayName) + '" loading="lazy" decoding="async"></div>'
       : '<div class="cert-row__avatar">' + esc(initials) + '</div>';
 
     return (
@@ -1184,8 +1264,12 @@ function renderInternships(list) {
 
     var skillsHtml = "";
     if (item.skills) {
-      skillsHtml = item.skills.split(",").map(function (s) {
-        return '<span class="skill-tag">' + esc(s.trim()) + '</span>';
+      // skills may be stored as an array by other writers — normalise first
+      var skillList = Array.isArray(item.skills) ? item.skills : String(item.skills).split(",");
+      skillsHtml = skillList.map(function (s) {
+        return String(s).trim();
+      }).filter(Boolean).map(function (s) {
+        return '<span class="skill-tag">' + esc(s) + '</span>';
       }).join("");
     }
 
@@ -1249,7 +1333,9 @@ document.addEventListener("DOMContentLoaded", function () {
     if (sec) sec.classList.add("active");
     if (name === "dashboard")    renderDashboard();
     if (name === "applications") renderApps();
-    if (name === "internships")  loadInternships();
+    // Internships are re-fetched after every save/delete, so switching tabs
+    // can render from cache instead of re-reading the whole collection.
+    if (name === "internships")  { if (internshipsLoaded) renderInternships(internshipsCache); else loadInternships(); }
     if (name === "certificates") renderCertificatesPanel();
   }
 
@@ -1261,7 +1347,11 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   // auth guard
+  var liveUnsubs = [];
   onAuthStateChanged(auth, async function (user) {
+    // Drop listeners from a previous auth state so they never stack up.
+    liveUnsubs.forEach(function (u) { try { u(); } catch (e) {} });
+    liveUnsubs = [];
     if (sessionStorage.getItem("guestRole")) return;
     if (!user) { window.location.href = "login.html"; return; }
 
@@ -1272,15 +1362,15 @@ document.addEventListener("DOMContentLoaded", function () {
       where("companyId", "==", user.uid)
     );
 
-    onSnapshot(appsQuery, function (snap) {
+    liveUnsubs.push(onSnapshot(appsQuery, function (snap) {
       appsCache = snap.docs.map(function (d) { return { id: d.id, ...d.data() }; });
-      renderApps();
-      renderDashboard();
-      renderInternships(internshipsCache);
-      renderCertificatesPanel();
+      scheduleRender("apps", renderApps);
+      scheduleRender("dashboard", renderDashboard);
+      scheduleRender("internships", function () { renderInternships(internshipsCache); });
+      scheduleRender("certs", renderCertificatesPanel);
     }, function (err) {
       console.error("Applications listener error:", err);
-    });
+    }));
 
     // Live-watch approved submissions for final tasks — used by the
     // certificates panel to know when "Approve completion" becomes enabled.
@@ -1288,16 +1378,16 @@ document.addEventListener("DOMContentLoaded", function () {
       collection(db, "taskSubmissions"),
       where("companyId", "==", user.uid)
     );
-    onSnapshot(subsQ, function (snap) {
+    liveUnsubs.push(onSnapshot(subsQ, function (snap) {
       approvedSubsCache = snap.docs
         .map(function (d) { return { id: d.id, ...d.data() }; })
         .filter(function (s) {
           return s.feedback && s.feedback.status === "approved";
         });
-      renderCertificatesPanel();
+      scheduleRender("certs", renderCertificatesPanel);
     }, function (err) {
       console.warn("Submissions listener error:", err);
-    });
+    }));
 
     // Live-watch all this company's internship tasks so we can check which
     // of them is the `isFinal` task per internship.
@@ -1305,24 +1395,25 @@ document.addEventListener("DOMContentLoaded", function () {
       collection(db, "tasks"),
       where("companyId", "==", user.uid)
     );
-    onSnapshot(tasksQ, function (snap) {
+    liveUnsubs.push(onSnapshot(tasksQ, function (snap) {
       tasksCacheByInternship = {};
       snap.forEach(function (d) {
         const t = { id: d.id, ...d.data() };
         if (!t.internshipId) return;
         (tasksCacheByInternship[t.internshipId] = tasksCacheByInternship[t.internshipId] || []).push(t);
       });
-      renderCertificatesPanel();
+      scheduleRender("certs", renderCertificatesPanel);
     }, function (err) {
       console.warn("Tasks listener error:", err);
-    });
+    }));
 
     // verification gate: live-watch the company doc
-    onSnapshot(doc(db, "companies", user.uid), function (snap) {
-      applyVerificationGate(snap.exists() ? snap.data() : {});
+    liveUnsubs.push(onSnapshot(doc(db, "companies", user.uid), function (snap) {
+      companyDocCache = snap.exists() ? snap.data() : {};
+      applyVerificationGate(companyDocCache);
     }, function (err) {
       console.error("Company doc listener error:", err);
-    });
+    }));
   });
 
   function applyVerificationGate(company) {
@@ -1431,28 +1522,60 @@ document.addEventListener("DOMContentLoaded", function () {
       await updateDoc(doc(db, "companies", user.uid), { companyName: v });
       localStorage.setItem("companyName", v);
       var sn = document.getElementById("sidebar-company-name"); if (sn) sn.textContent = v;
-      var av = document.getElementById("sidebar-avatar");       if (av) av.textContent = v.slice(0, 2).toUpperCase();
+      // don't wipe an uploaded logo <img> with initials
+      var av = document.getElementById("sidebar-avatar");       if (av && !av.querySelector("img")) av.textContent = v.slice(0, 2).toUpperCase();
       showStatus("companyNameStatus", "Updated.", "ok");
     } catch (e) { console.error(e); showStatus("companyNameStatus", "Failed to save.", "err"); }
   });
 
-  wire("updateCompanyLocationBtn", function () {
+  wire("updateCompanyLocationBtn", async function () {
     var v = document.getElementById("companyLocationInput").value.trim();
     if (!v) return showStatus("companyLocationStatus", "Location required.", "err");
     localStorage.setItem("companyLocation", v);
+    // Persist to the company profile too (previously only saved locally).
+    var user = auth.currentUser;
+    if (user) {
+      try { await updateDoc(doc(db, "companies", user.uid), { location: v }); }
+      catch (e) { console.error(e); return showStatus("companyLocationStatus", "Failed to save.", "err"); }
+    }
     showStatus("companyLocationStatus", "Location saved.", "ok");
   });
 
-  wire("companyEmailBtn", function () {
+  function authErrMsg(e) {
+    return e && e.code === "auth/requires-recent-login"
+      ? "Session expired. Please sign in again first."
+      : (e && (e.code || e.message)) || "Request failed.";
+  }
+
+  // These previously reported success without calling Firebase at all.
+  wire("companyEmailBtn", async function () {
     var v = document.getElementById("companyEmailInput").value.trim();
     if (!v) return showStatus("companyEmailStatus", "Email required.", "err");
-    showStatus("companyEmailStatus", "Email update requested.", "ok");
+    var user = auth.currentUser;
+    if (!user) return showStatus("companyEmailStatus", "Not logged in.", "err");
+    try {
+      await verifyBeforeUpdateEmail(user, v);
+      showStatus("companyEmailStatus", "Verification email sent — check your inbox.", "ok");
+    } catch (e) {
+      console.error(e);
+      showStatus("companyEmailStatus", authErrMsg(e), "err");
+    }
   });
 
-  wire("companyPasswordBtn", function () {
-    var v = document.getElementById("companyPasswordInput").value;
+  wire("companyPasswordBtn", async function () {
+    var input = document.getElementById("companyPasswordInput");
+    var v = input.value;
     if (v.length < 6) return showStatus("companyPasswordStatus", "Min. 6 characters.", "err");
-    showStatus("companyPasswordStatus", "Password updated.", "ok");
+    var user = auth.currentUser;
+    if (!user) return showStatus("companyPasswordStatus", "Not logged in.", "err");
+    try {
+      await updatePassword(user, v);
+      input.value = "";
+      showStatus("companyPasswordStatus", "Password updated.", "ok");
+    } catch (e) {
+      console.error(e);
+      showStatus("companyPasswordStatus", authErrMsg(e), "err");
+    }
   });
 
   wire("companySupportBtn", async function () {
@@ -1638,7 +1761,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     try {
       const snap = await getDoc(doc(db, "companies", user.uid));
-      if (snap.exists() && snap.data().verified !== true) {
+      if (!snap.exists() || snap.data().verified !== true) {
         alert("Your company account is still awaiting verification. An admin must approve your account before you can post internships. You'll receive a notification when approved.");
         return;
       }
@@ -1721,7 +1844,40 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
+  let notifUnsub = null;
+  // Wired once (previously re-added on every auth state change).
+  markAll?.addEventListener("click", async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+      const snap2 = await getDocs(query(
+        collection(db, "notifications"),
+        where("studentId", "==", user.uid),
+        where("isRead", "==", false),
+      ));
+      if (snap2.empty) return;
+      const batch = writeBatch(db);
+      snap2.forEach((d) => batch.update(d.ref, { isRead: true }));
+      await batch.commit();
+    } catch (err) {
+      console.warn("[company-notif] mark-all failed:", err);
+    }
+  });
+
+  // Event delegation — one listener instead of one per row per snapshot.
+  list.addEventListener("click", async (e) => {
+    const row = e.target.closest(".notif-item");
+    const id = row && row.getAttribute("data-id");
+    if (!id || row.classList.contains("read")) return;
+    try {
+      await updateDoc(doc(db, "notifications", id), { isRead: true });
+    } catch (err) {
+      console.warn("[company-notif] mark read failed:", err);
+    }
+  });
+
   onAuthStateChanged(auth, (user) => {
+    if (notifUnsub) { notifUnsub(); notifUnsub = null; }
     if (!user) return;
 
     const q = query(
@@ -1733,7 +1889,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const _seenCompanyNotifIds = new Set();
     let _seenCoInit = false;
 
-    onSnapshot(q, (snap) => {
+    notifUnsub = onSnapshot(q, (snap) => {
       const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       const unread = items.filter((n) => !n.isRead).length;
 
@@ -1788,37 +1944,9 @@ document.addEventListener("DOMContentLoaded", function () {
             </div>
           </div>`;
       }).join("");
-
-      list.querySelectorAll(".notif-item").forEach((row) => {
-        row.addEventListener("click", async () => {
-          const id = row.getAttribute("data-id");
-          if (!id) return;
-          try {
-            await updateDoc(doc(db, "notifications", id), { isRead: true });
-          } catch (err) {
-            console.warn("[company-notif] mark read failed:", err);
-          }
-        });
-      });
     }, (err) => {
       console.error("[company-notif] subscription failed:", err);
       list.innerHTML = `<p class="notif-empty" style="color:#ef4444">Could not load notifications.</p>`;
-    });
-
-    markAll?.addEventListener("click", async () => {
-      try {
-        const snap2 = await getDocs(query(
-          collection(db, "notifications"),
-          where("studentId", "==", user.uid),
-          where("isRead", "==", false),
-        ));
-        if (snap2.empty) return;
-        const batch = writeBatch(db);
-        snap2.forEach((d) => batch.update(d.ref, { isRead: true }));
-        await batch.commit();
-      } catch (err) {
-        console.warn("[company-notif] mark-all failed:", err);
-      }
     });
   });
 })();

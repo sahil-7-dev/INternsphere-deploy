@@ -244,21 +244,32 @@ function rehydrateThread(entries) {
 }
 
 // send flow
+let sending = false;
+
 async function sendMessage(text) {
   const clean = (text || "").trim();
   if (!clean) return;
+  // Enter still fires while the send button is disabled — don't start a
+  // second request that would race the first on history / editor edits.
+  if (sending) return;
+  sending = true;
   const sendBtn = $("send");
 
   appendMsg(clean, "user");
   const typing = appendTyping();
   if (sendBtn) sendBtn.disabled = true;
 
-  // Refresh context so task status/submission counts stay current
-  if (auth.currentUser) {
-    await loadContext(auth.currentUser).catch(() => {});
-  }
-
   try {
+    // Refresh context so task status/submission counts stay current. Prefer
+    // the workroom's live state (no extra reads, and it reflects the task
+    // actually open in the editor); fall back to querying Firestore.
+    const live = window.WorkroomEditor?.getContext?.();
+    if (live) {
+      ctx = { ...ctx, ...live };
+    } else if (auth.currentUser) {
+      await loadContext(auth.currentUser).catch(() => {});
+    }
+
     const editorHtml = window.WorkroomEditor?.getContent() || "";
     const editorIsEmpty = window.WorkroomEditor?.isEmpty() ?? true;
 
@@ -334,6 +345,7 @@ async function sendMessage(text) {
       $("console")?.appendChild(err);
     }
   } finally {
+    sending = false;
     if (sendBtn) sendBtn.disabled = false;
   }
 }
@@ -390,7 +402,7 @@ function init() {
 
   const handleSend = () => {
     const v = inputField.value?.trim();
-    if (!v) return;
+    if (!v || sending) return;
     inputField.value = "";
     hideSuggest();
     sendMessage(v);

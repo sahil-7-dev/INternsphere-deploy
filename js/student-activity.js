@@ -198,7 +198,11 @@ function renderSkillChips() {
 }
 
 function escHtml(s) {
-  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // Also escape quotes — this is used inside attribute values (e.g. the
+  // interview meeting href), where an unescaped " would break out.
+  return String(s || "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 function addSkillFromInput() {
@@ -256,7 +260,7 @@ function updateTopbarIdentity(name, profilePic) {
   if (userName) userName.textContent = (name || "User").split(" ")[0];
   if (avatar) {
     if (profilePic) {
-      avatar.style.backgroundImage = `url(${profilePic})`;
+      avatar.style.backgroundImage = `url("${String(profilePic).replace(/["\\\n\r]/g, "")}")`;
       avatar.style.backgroundSize = "cover";
       avatar.style.backgroundPosition = "center";
       avatar.textContent = "";
@@ -324,6 +328,32 @@ function closeProfileModal() {
   $("profileModal")?.classList.remove("is-open");
 }
 
+const PROFILE_PIC_INLINE_MAX = 200 * 1024; // keep small files untouched
+const PROFILE_PIC_MAX_DIM = 512;
+
+function shrinkImageDataUrl(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, PROFILE_PIC_MAX_DIM / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        let out = canvas.toDataURL("image/webp", 0.85);
+        // Browsers without WebP encoding fall back to PNG; use JPEG then.
+        if (!out.startsWith("data:image/webp")) out = canvas.toDataURL("image/jpeg", 0.85);
+        resolve(out);
+      } catch (e) { reject(e); }
+    };
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
 function wireProfilePicPicker() {
   const input = $("profilePicInput");
   const PROFILE_PIC_MAX = 5 * 1024 * 1024; // 5 MB
@@ -336,8 +366,13 @@ function wireProfilePicPicker() {
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result;
+    reader.onload = async () => {
+      // The picture is stored inline in students/{uid}; Firestore caps a
+      // document at 1 MiB, so a multi-MB photo would make Save fail.
+      // Downscale anything non-trivial to a small avatar first.
+      const dataUrl = file.size > PROFILE_PIC_INLINE_MAX
+        ? await shrinkImageDataUrl(reader.result).catch(() => reader.result)
+        : reader.result;
       applyProfilePic(dataUrl, $("profileName").value || "U");
     };
     reader.readAsDataURL(file);
@@ -658,10 +693,10 @@ function renderTasks(tasks) {
 
       return `
         <div class="task-item${overflow}" style="display:flex;align-items:center;gap:14px;padding:14px;border-radius:12px;background:rgba(255,255,255,0.03);${borderStyle};transition:all 200ms">
-          <div style="width:32px;height:32px;border-radius:10px;display:grid;place-items:center;font-weight:900;background:${finalIconBg};color:#fff;font-size:13px">${finalIcon}</div>
+          <div style="width:32px;height:32px;border-radius:10px;display:grid;place-items:center;font-weight:900;background:${finalIconBg};color:#fff;font-size:13px">${esc(finalIcon)}</div>
           <div style="flex:1;min-width:0">
             <div style="font-weight:700;font-size:0.95rem">${esc(t.title)}${finalBadge}${pdfBadge}</div>
-            <div class="muted" style="font-size:0.82rem;margin-top:2px">${esc(t.description || "").slice(0, 100)}${(t.description || "").length > 100 ? "…" : ""}</div>
+            <div class="muted" style="font-size:0.82rem;margin-top:2px">${esc(String(t.description || "").slice(0, 100))}${(t.description || "").length > 100 ? "…" : ""}</div>
           </div>
           <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;background:${statusBg};color:${statusColor};white-space:nowrap">${status}</span>
         </div>`;
@@ -941,6 +976,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   onAuthStateChanged(auth, (user) => {
     if (!user) return;
+    // Guard against repeat callbacks for the same user stacking duplicate
+    // onSnapshot listeners.
+    if (state.uid === user.uid) return;
     state.uid = user.uid;
     loadProfile(user);
     subscribeToMyApplications(user.uid);
@@ -957,9 +995,11 @@ function subscribeToMyApplications(uid) {
     state.applications = [];
     snap.forEach((d) => state.applications.push({ id: d.id, ...d.data() }));
     renderApplicationsKpi();
-    renderUpcomingInterviews();
-  });
+    renderUpcomingInterviews().catch((e) => console.error("renderUpcomingInterviews:", e));
+  }, (err) => console.error("applications subscription:", err));
 }
+
+let _interviewRenderSeq = 0;
 
 const _interviewMetaCache = {};
 async function hydrateShortlistMeta(app) {
@@ -967,12 +1007,13 @@ async function hydrateShortlistMeta(app) {
   let companyName = "the company";
   let internshipTitle = "the internship";
   try {
-    if (app.internshipId) {
-      const intSnap = await getDoc(doc(db, "internships", app.internshipId));
-      if (intSnap.exists()) internshipTitle = intSnap.data().title || internshipTitle;
-    }
-    if (app.companyId) {
-      const coSnap = await getDoc(doc(db, "companies", app.companyId));
+    // Fetch both docs in parallel rather than back-to-back.
+    const [intSnap, coSnap] = await Promise.all([
+      app.internshipId ? getDoc(doc(db, "internships", app.internshipId)) : null,
+      app.companyId ? getDoc(doc(db, "companies", app.companyId)) : null,
+    ]);
+    if (intSnap?.exists()) internshipTitle = intSnap.data().title || internshipTitle;
+    if (coSnap) {
       if (coSnap.exists()) {
         const d = coSnap.data();
         companyName = d.companyName || d.name || companyName;
@@ -986,6 +1027,7 @@ async function hydrateShortlistMeta(app) {
 async function renderUpcomingInterviews() {
   const host = document.getElementById("upcomingInterviews");
   if (!host) return;
+  const seq = ++_interviewRenderSeq;
 
   const now = Date.now();
   const shortlisted = (state.applications || []).filter((a) => {
@@ -1011,6 +1053,8 @@ async function renderUpcomingInterviews() {
   const enriched = await Promise.all(
     shortlisted.map(async (app) => ({ app, meta: await hydrateShortlistMeta(app) })),
   );
+  // A newer snapshot started rendering while we awaited — let it win.
+  if (seq !== _interviewRenderSeq) return;
 
   const tzAbbrOf = (tz) => {
     if (!tz) return "";
@@ -1084,7 +1128,7 @@ function renderApplicationsKpi() {
 
   const apps = state.applications || [];
   const total = apps.length;
-  const pending = apps.filter((a) => a.status === "Pending").length;
+  const pending = apps.filter((a) => (a.status || "Pending") === "Pending").length;
   const approved = apps.filter((a) => a.status === "Approved").length;
   const shortlisted = apps.filter((a) => a.status === "Shortlisted").length;
   const rejected = apps.filter((a) => a.status === "Rejected").length;

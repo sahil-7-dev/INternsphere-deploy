@@ -16,6 +16,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 import { esc } from "./lib/escape.js";
+import { sanitizeSubmissionHtml } from "./lib/sanitize.js";
 
 // ---- DOM refs -------------------------------------------------------
 const editor = document.getElementById("editor");
@@ -46,6 +47,16 @@ let activeTaskId = null;
 let pendingPdf = null; // { name, size, dataUrl } for the currently-active task
 let approvedAppId = null;            // firestore id of the approved application
 let certificateIssued = false;       // company-flipped flag gating completion cert
+let snapshotUnsubs = [];             // live listeners for the current user
+let submitting = false;              // guards against double submission
+let loadedEditorKey = null;          // which task/submission state the editor holds
+
+function draftKey(taskId) {
+  return `wr_draft_${studentUid}_${taskId}`;
+}
+function readDraft(taskId) {
+  try { return localStorage.getItem(draftKey(taskId)) || ""; } catch { return ""; }
+}
 
 function isLocked(sub) {
   if (!sub) return false;
@@ -69,8 +80,15 @@ function saveActiveTaskId(id) {
 
 //   TASK LOADING + SUBMISSIONS
 
+function teardownSubscriptions() {
+  snapshotUnsubs.forEach((u) => { try { u(); } catch {} });
+  snapshotUnsubs = [];
+}
+
 async function bootstrapForStudent(user) {
+  teardownSubscriptions();
   studentUid = user.uid;
+  loadedEditorKey = null;
 
   try {
     const stu = await getDoc(doc(db, "students", user.uid));
@@ -123,22 +141,22 @@ async function bootstrapForStudent(user) {
 
 function subscribeToApprovedApp() {
   if (!approvedAppId) return;
-  onSnapshot(doc(db, "applications", approvedAppId), (snap) => {
+  snapshotUnsubs.push(onSnapshot(doc(db, "applications", approvedAppId), (snap) => {
     if (!snap.exists()) return;
     certificateIssued = snap.data().certificateIssued === true;
     // if the student is already on the completion modal, refresh its controls
     refreshCompletionModal();
-  });
+  }, (err) => console.warn("[workroom] application listener:", err?.message)));
 }
 
 function subscribeToTasks() {
   const q = query(collection(db, "tasks"), where("internshipId", "==", internshipId));
-  onSnapshot(q, (snap) => {
+  snapshotUnsubs.push(onSnapshot(q, (snap) => {
     tasks = [];
     snap.forEach((d) => tasks.push({ id: d.id, ...d.data() }));
     tasks.sort((a, b) => (a.order || 0) - (b.order || 0));
     renderTasks();
-  });
+  }, (err) => console.warn("[workroom] tasks listener:", err?.message)));
 }
 
 function subscribeToSubmissions() {
@@ -147,14 +165,14 @@ function subscribeToSubmissions() {
     where("studentId", "==", studentUid),
     where("internshipId", "==", internshipId),
   );
-  onSnapshot(q, (snap) => {
+  snapshotUnsubs.push(onSnapshot(q, (snap) => {
     submissions = {};
     snap.forEach((d) => {
       const data = d.data();
       submissions[data.taskId] = { id: d.id, ...data };
     });
     renderTasks();
-  });
+  }, (err) => console.warn("[workroom] submissions listener:", err?.message)));
 }
 
 function renderTasks() {
@@ -196,7 +214,7 @@ function renderTasks() {
       if (t.isFinal) cls.push("is-final");
       const marker = rejected ? "✖" : locked ? "✔" : isActive ? "➤" : "•";
       const finalFlag = t.isFinal ? ' <span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(236,72,153,0.18);color:#ec4899;margin-left:4px;font-weight:800;letter-spacing:0.04em">🏁 FINAL</span>' : "";
-      return `<div class="${cls.join(" ")}" data-id="${t.id}">${marker} ${esc(t.title)}${finalFlag}</div>`;
+      return `<div class="${cls.join(" ")}" data-id="${esc(t.id)}">${marker} ${esc(t.title)}${finalFlag}</div>`;
     })
     .join("");
 
@@ -219,7 +237,6 @@ function renderTasks() {
 function loadActive() {
   const t = tasks.find((x) => x.id === activeTaskId);
   if (!t) return;
-  pendingPdf = null;
   if (titleEl) titleEl.textContent = t.title;
   if (descEl) {
     let desc = t.description || "—";
@@ -234,15 +251,27 @@ function loadActive() {
   // Banner for rejected tasks
   showRejectionBanner(t, sub, rejected);
 
+  // Every tasks/submissions snapshot calls renderTasks → loadActive. Only
+  // reload the editor (and drop the attached PDF) when the task or its
+  // submission state actually changed — otherwise a snapshot would wipe
+  // whatever the student typed since the last draft save.
+  const key = `${t.id}|${sub?.id || ""}|${locked ? "locked" : rejected ? "rejected" : "open"}`;
+  if (key === loadedEditorKey) {
+    toggleSubmit();
+    return;
+  }
+  loadedEditorKey = key;
+  pendingPdf = null;
+
   if (editor) {
     if (locked) {
-      editor.innerHTML = sub.content || "";
+      editor.innerHTML = sanitizeSubmissionHtml(sub.content || "");
       editor.contentEditable = "false";
     } else if (rejected) {
-      editor.innerHTML = sub.content || localStorage.getItem(`wr_draft_${studentUid}_${t.id}`) || "";
+      editor.innerHTML = sanitizeSubmissionHtml(readDraft(t.id) || sub.content || "");
       editor.contentEditable = "true";
     } else {
-      editor.innerHTML = localStorage.getItem(`wr_draft_${studentUid}_${t.id}`) || "";
+      editor.innerHTML = sanitizeSubmissionHtml(readDraft(t.id));
       editor.contentEditable = "true";
     }
     updateCounts();
@@ -300,9 +329,12 @@ function escapeHtml(s) {
 }
 
 function saveDraft() {
-  if (!editor || !activeTaskId) return;
-  if (submissions[activeTaskId]) return;
-  localStorage.setItem(`wr_draft_${studentUid}_${activeTaskId}`, editor.innerHTML);
+  if (!editor || !activeTaskId || !studentUid) return;
+  // Locked (submitted, not rejected) tasks have nothing to draft; rejected
+  // ones do — the student is revising them.
+  if (isLocked(submissions[activeTaskId]) || submitting) return;
+  if (editor.getAttribute("contenteditable") === "false") return;
+  try { localStorage.setItem(draftKey(activeTaskId), editor.innerHTML); } catch {}
 }
 
 function updateProgress() {
@@ -331,6 +363,7 @@ function showNoInternship() {
 
 //   SUBMIT TASK — write to Firestore
 async function submitActiveTask() {
+  if (submitting) return;
   if (!editor || !activeTaskId || !studentUid || !internshipId) return;
   if (editor.innerText.trim().length === 0) return;
 
@@ -349,12 +382,20 @@ async function submitActiveTask() {
     return;
   }
 
+  // Strip AI reveal spans (if an animation is mid-flight) and any unsafe
+  // markup before the HTML leaves the browser — companies render it.
+  unwrapAiSpans(editor);
+  const content = sanitizeSubmissionHtml(editor.innerHTML);
+  const submitTaskId = activeTaskId;
+
+  submitting = true;
+  clearTimeout(draftTimer);
   submitBtn.disabled = true;
   submitBtn.textContent = rejected ? "Resubmitting…" : "Submitting…";
   try {
     if (existing) {
       const payload = {
-        content: editor.innerHTML,
+        content,
         submittedAt: serverTimestamp(),
         reviewed: false,
         feedback: deleteField(), // remove prior feedback; company will re-review
@@ -369,11 +410,11 @@ async function submitActiveTask() {
     } else {
       // FRESH submission
       const payload = {
-        taskId: activeTaskId,
+        taskId: submitTaskId,
         studentId: studentUid,
         internshipId,
         companyId: task?.companyId || "",
-        content: editor.innerHTML,
+        content,
         submittedAt: serverTimestamp(),
         reviewed: false,
       };
@@ -386,14 +427,15 @@ async function submitActiveTask() {
       showToast("Task submitted successfully!");
     }
 
-    localStorage.removeItem(`wr_draft_${studentUid}_${activeTaskId}`);
-    pendingPdf = null;
+    try { localStorage.removeItem(draftKey(submitTaskId)); } catch {}
+    if (activeTaskId === submitTaskId) pendingPdf = null;
   } catch (e) {
     console.error(e);
     const msg = e?.message || String(e);
     showToast("Failed to submit: " + msg.slice(0, 100), "error");
     submitBtn.disabled = false;
   } finally {
+    submitting = false;
     submitBtn.textContent = rejected ? "Resubmit Task" : "Submit Task";
   }
 }
@@ -492,12 +534,25 @@ function renderFinalTaskBanner(finalTask) {
   }
 }
 
-// Autosave drafts periodically
+// Autosave drafts — debounced on input (instead of a forever-running 2s
+// interval), plus a final flush when the page is hidden / unloaded.
+let draftTimer = null;
+function scheduleDraftSave() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(saveDraft, 800);
+}
+function flushDraft() {
+  if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; saveDraft(); }
+}
 if (editor) {
-  setInterval(saveDraft, 2000);
   editor.addEventListener("input", () => {
     updateCounts();
     toggleSubmit();
+    scheduleDraftSave();
+  });
+  window.addEventListener("pagehide", flushDraft);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushDraft();
   });
 }
 
@@ -517,6 +572,7 @@ function toggleSubmit() {
   const task = tasks.find((x) => x.id === activeTaskId);
   const textOk = editor.innerText.trim().length > 0;
   const pdfOk = !task?.requirePdf || !!pendingPdf || !!(rejected && sub?.pdfName);
+  if (submitting) return; // keep the in-flight "Submitting…" state
   submitBtn.disabled = locked || !textOk || !pdfOk;
   submitBtn.textContent = rejected ? "Resubmit Task" : "Submit Task";
   if (task?.requirePdf && !pendingPdf && !pdfOk && !locked) {
@@ -577,6 +633,7 @@ document.getElementById("undoAI")?.addEventListener("click", () => {
     updateCounts();
     toggleSubmit();
     updateUndoButton();
+    scheduleDraftSave();
     showToast("AI change reverted");
   } else {
     document.execCommand("undo");
@@ -679,12 +736,15 @@ window.WorkroomEditor = {
   isEmpty() {
     return !editor || editor.innerText.trim().length === 0;
   },
+  // AI-produced HTML is untrusted (prompt injection via task briefs etc.),
+  // so everything written into the editor goes through the sanitizer.
   replaceContent(html) {
     if (!editor) return false;
     pushAiUndoSnapshot();
-    editor.innerHTML = html;
+    editor.innerHTML = sanitizeSubmissionHtml(html);
     updateCounts();
     toggleSubmit();
+    scheduleDraftSave();
     return true;
   },
   replaceContentAnimated(html) {
@@ -699,7 +759,7 @@ window.WorkroomEditor = {
     const oldText = editor.innerText || "";
     pushAiUndoSnapshot();
 
-    editor.innerHTML = html;
+    editor.innerHTML = sanitizeSubmissionHtml(html);
     const newText = editor.innerText || "";
     const changed = diffChangedWordIndices(oldText, newText);
     const { totalMs } = wrapWordsForReveal(editor, changed);
@@ -710,20 +770,49 @@ window.WorkroomEditor = {
     aiAnimCleanupTimer = setTimeout(() => {
       unwrapAiSpans(editor);
       aiAnimCleanupTimer = null;
+      scheduleDraftSave();
     }, totalMs);
     return true;
   },
   appendContent(html) {
     if (!editor) return false;
     pushAiUndoSnapshot();
-    editor.innerHTML = (editor.innerHTML || "") + html;
+    editor.innerHTML = (editor.innerHTML || "") + sanitizeSubmissionHtml(html);
     updateCounts();
     toggleSubmit();
+    scheduleDraftSave();
     return true;
   },
   focus() { editor?.focus(); },
   isEditable() {
     return editor && editor.getAttribute("contenteditable") !== "false";
+  },
+  // Live workroom state for TARS — avoids tars-workroom.js re-querying
+  // Firestore on every message, and reflects the task actually on screen.
+  getContext() {
+    if (!internshipId) return null;
+    const t = tasks.find((x) => x.id === activeTaskId);
+    const sub = t ? submissions[t.id] : null;
+    let status;
+    if (t) {
+      if (!sub) status = "not yet submitted";
+      else if (sub.feedback?.status === "rejected") status = "rejected — awaiting revision";
+      else if (sub.feedback?.score != null) status = `approved (score ${sub.feedback.score}/100)`;
+      else status = "submitted, awaiting review";
+    }
+    const finalTask = tasks.find((x) => x.isFinal);
+    return {
+      internshipId,
+      internshipTitle: internshipTitle || "",
+      companyName: internshipCompany || "",
+      taskCount: tasks.length,
+      tasksDone: tasks.filter((x) => isLocked(submissions[x.id])).length,
+      finalTaskTitle: finalTask?.title || "",
+      activeTaskTitle: t?.title || "",
+      activeTaskDescription: t?.description || "",
+      activeTaskRequiresPdf: !!t?.requirePdf,
+      activeTaskStatus: status,
+    };
   },
 };
 
@@ -812,7 +901,10 @@ const ALLOWED_TYPES = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ];
 
-const PDF_MAX_BYTES = 900 * 1024; // 900 KB base64-encoded fits Firestore 1MB doc limit
+// Stored inline as base64 (+33%) on the submission doc; Firestore caps docs
+// at 1 MiB. 900 KB became ~1.2 MB and always failed — 700 KB fits with
+// room for the editor HTML.
+const PDF_MAX_BYTES = 700 * 1024;
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -844,12 +936,14 @@ async function handleFiles(files) {
   const task = tasks.find((x) => x.id === activeTaskId);
 
   for (const file of arr) {
-    if (!ALLOWED_TYPES.includes(file.type)) {
+    // Some OSes report an empty MIME type for PDFs — fall back to extension.
+    const isPdf = file.type === "application/pdf" || (!file.type && /\.pdf$/i.test(file.name));
+    if (!isPdf && !ALLOWED_TYPES.includes(file.type)) {
       showToast("Unsupported file: " + file.name, "error");
       continue;
     }
 
-    if (file.type === "application/pdf" && task?.requirePdf) {
+    if (isPdf && task?.requirePdf) {
       if (file.size > PDF_MAX_BYTES) {
         showToast(
           `PDF too large (${formatSize(file.size)}). Max ${formatSize(PDF_MAX_BYTES)}.`,
@@ -859,7 +953,11 @@ async function handleFiles(files) {
       }
       try {
         const dataUrl = await readFileAsDataUrl(file);
-        pendingPdf = { name: file.name, size: file.size, dataUrl };
+        // The student may have switched tasks while the file was being read.
+        if (task.id !== activeTaskId) continue;
+        // Previously attached PDF row is superseded by this one.
+        uploadedList?.querySelectorAll(".uploaded-item.is-pdf").forEach((el) => el.remove());
+        pendingPdf = { name: file.name, size: file.size, dataUrl, file };
         showToast(`PDF attached: ${file.name}`, "success");
       } catch (e) {
         console.error(e);
@@ -868,11 +966,12 @@ async function handleFiles(files) {
       }
     }
 
+    if (!uploadedList) continue;
     const item = document.createElement("div");
-    item.className = "uploaded-item";
+    item.className = "uploaded-item" + (isPdf && task?.requirePdf ? " is-pdf" : "");
     const ext = file.name.split(".").pop().toUpperCase();
     item.innerHTML = `
-      <span class="file-ext">${ext}</span>
+      <span class="file-ext">${escapeHtml(ext)}</span>
       <span class="file-info">
         <span class="file-name">${escapeHtml(file.name)}</span>
         <span class="file-size">${formatSize(file.size)}</span>
@@ -881,7 +980,7 @@ async function handleFiles(files) {
     `;
     item.querySelector(".remove-file").addEventListener("click", () => {
       item.classList.add("removing");
-      if (file.type === "application/pdf") pendingPdf = null;
+      if (pendingPdf?.file === file) pendingPdf = null;
       setTimeout(() => {
         item.remove();
         updateUploadLabel();

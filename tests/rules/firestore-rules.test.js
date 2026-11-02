@@ -421,3 +421,77 @@ describe("adminActions (audit log)", () => {
     await assertFails(deleteDoc(doc(asAdmin(), "adminActions", "a1")));
   });
 });
+
+describe("privilege escalation guards", () => {
+  beforeEach(async () => {
+    await seedUser("stu", "student");
+    await seedUser("co",  "company");
+    await seedUser("adm", "admin");
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, "companies", "co"), { companyName: "Co", verified: false });
+      await setDoc(doc(db, "students", "stu"), { name: "Stu" });
+      await setDoc(doc(db, "students", "stu2"), { name: "Stu2" });
+    });
+    await seedApplication("appA", "stu", "co");
+  });
+
+  test("new user CAN create their own users doc as student/company", async () => {
+    const db = testEnv.authenticatedContext("newbie").firestore();
+    await assertSucceeds(setDoc(doc(db, "users", "newbie"), { role: "student", email: "n@test" }));
+  });
+
+  test("new user CANNOT create their own users doc as admin", async () => {
+    const db = testEnv.authenticatedContext("evil").firestore();
+    await assertFails(setDoc(doc(db, "users", "evil"), { role: "admin", email: "e@test" }));
+  });
+
+  test("user CANNOT promote themselves or lift their own suspension", async () => {
+    await assertFails(updateDoc(doc(asStudent(), "users", "stu"), { role: "admin" }));
+    await assertFails(updateDoc(doc(asStudent(), "users", "stu"), { disabled: false }));
+    await assertSucceeds(updateDoc(doc(asStudent(), "users", "stu"), { name: "New name" }));
+  });
+
+  test("admin CAN change another user's role", async () => {
+    await assertSucceeds(updateDoc(doc(asAdmin(), "users", "stu"), { role: "dev" }));
+  });
+
+  test("company CANNOT self-verify but CAN re-request verification", async () => {
+    await assertFails(updateDoc(doc(asCompany(), "companies", "co"), { verified: true }));
+    await assertSucceeds(
+      updateDoc(doc(asCompany(), "companies", "co"), { rejected: false, rejectReason: "" })
+    );
+  });
+
+  test("unverified company CANNOT post; verified company CAN", async () => {
+    await assertFails(
+      addDoc(collection(asCompany(), "internships"), { companyId: "co", title: "X" })
+    );
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), "companies", "co"), { verified: true });
+    });
+    await assertSucceeds(
+      addDoc(collection(asCompany(), "internships"), { companyId: "co", title: "X" })
+    );
+  });
+
+  test("student CANNOT approve their own application or self-issue a certificate", async () => {
+    await assertFails(updateDoc(doc(asStudent(), "applications", "appA"), { status: "Approved" }));
+    await assertFails(updateDoc(doc(asStudent(), "applications", "appA"), { certificateIssued: true }));
+    await assertSucceeds(updateDoc(doc(asCompany(), "applications", "appA"), { status: "Approved" }));
+  });
+
+  test("student CANNOT read another student's profile; company CAN", async () => {
+    await assertSucceeds(getDoc(doc(asStudent(), "students", "stu")));
+    await assertFails(getDoc(doc(asStudent(), "students", "stu2")));
+    await assertSucceeds(getDoc(doc(asCompany(), "students", "stu2")));
+  });
+
+  test("non-admin CANNOT send a notification posing as admin", async () => {
+    await assertFails(
+      addDoc(collection(asCompany(), "notifications"), {
+        studentId: "stu", message: "x", senderUid: "co", senderRole: "admin",
+      })
+    );
+  });
+});

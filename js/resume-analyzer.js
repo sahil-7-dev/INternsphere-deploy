@@ -211,7 +211,7 @@ function renderResult(data) {
       roleSection.style.display = "";
       requestAnimationFrame(() => { const b = $("raRoleBar"); if (b) b.style.width = rs + "%"; });
       animateNumber($("raRoleVal"), rs, "%");
-      const rn = $("raRoleName"); if (rn) rn.textContent = `Role Fit: ${esc(selectedRole.title)}`;
+      const rn = $("raRoleName"); if (rn) rn.textContent = `Role Fit: ${selectedRole.title}`;
       const rf = $("raRoleFeedback"); if (rf && data.roleFeedback) rf.textContent = data.roleFeedback;
     } else {
       roleSection.style.display = "none";
@@ -315,9 +315,9 @@ async function loadGapOpportunities(missingSkills) {
     const norm = missingSkills.map((s) => String(s).trim().toLowerCase()).filter(Boolean);
     if (!norm.length) { container.style.display = "none"; return; }
 
-    const snap = await getDocs(query(collection(db, "internships"), where("status", "==", "Open"), limit(60)));
+    const docs = await fetchOpenInternships();
     const matches = [];
-    snap.forEach((d) => {
+    docs.forEach((d) => {
       const data = d.data();
       const required = parseSkills(data.skills || data.requiredSkills).map(s => s.toLowerCase());
       const overlap = norm.filter((s) => required.includes(s));
@@ -363,9 +363,9 @@ async function loadStrongFits(detectedSkills) {
     const haveSet = new Set(detectedSkills.map((s) => String(s).trim().toLowerCase()).filter(Boolean));
     if (!haveSet.size) { container.style.display = "none"; return; }
 
-    const snap = await getDocs(query(collection(db, "internships"), where("status", "==", "Open"), limit(60)));
+    const docs = await fetchOpenInternships();
     const matches = [];
-    snap.forEach((d) => {
+    docs.forEach((d) => {
       const data = d.data();
       const required = parseSkills(data.skills || data.requiredSkills).map((s) => s.toLowerCase());
       if (!required.length) return;
@@ -404,6 +404,20 @@ async function loadStrongFits(detectedSkills) {
     console.warn("[resume] strong fits:", e?.message);
     container.style.display = "none";
   }
+}
+
+// Open internships are needed by the role selector, gap-opportunities and
+// strong-fit panels. Fetch once per page load and share the promise instead
+// of re-querying on every render (re-renders happen on history edits too).
+let openInternshipsPromise = null;
+function fetchOpenInternships() {
+  if (!openInternshipsPromise) {
+    openInternshipsPromise = getDocs(
+      query(collection(db, "internships"), where("status", "==", "Open"), limit(60)),
+    ).then((snap) => snap.docs)
+      .catch((e) => { openInternshipsPromise = null; throw e; });
+  }
+  return openInternshipsPromise;
 }
 
 // Normalize skills — Firestore stores as comma string or array
@@ -475,8 +489,8 @@ async function loadRoleSelector() {
   }
 
   try {
-    const snap = await getDocs(query(collection(db, "internships"), where("status", "==", "Open"), limit(40)));
-    snap.forEach((d) => {
+    const docs = (await fetchOpenInternships()).slice(0, 40);
+    docs.forEach((d) => {
       const data = d.data();
       roles.push({ id: d.id, title: data.title || "Internship", skills: parseSkills(data.skills || data.requiredSkills), description: data.description || "" });
     });
@@ -541,7 +555,11 @@ async function loadRoleSelector() {
 
 // ── Run analysis ──────────────────────────────────────────────────────────────
 
+let analyzing = false;
+
 async function runAnalysis(dataUrl, fileName) {
+  if (analyzing) return;
+  analyzing = true;
   setState("loading");
   $("raFileName").style.display = "";
   $("raFileName").textContent = "Analyzing: " + fileName;
@@ -571,6 +589,8 @@ async function runAnalysis(dataUrl, fileName) {
     clearInterval(timer);
     console.error("[resume-analyzer]", e);
     showError(friendlyGeminiError(e));
+  } finally {
+    analyzing = false;
   }
 }
 
@@ -677,7 +697,7 @@ function updateTopbarIdentity(name, profilePic) {
   if (userName) userName.textContent = (name || "User").split(" ")[0];
   if (avatar) {
     if (profilePic) {
-      avatar.style.backgroundImage = `url(${profilePic})`;
+      avatar.style.backgroundImage = `url(${JSON.stringify(String(profilePic))})`;
       avatar.style.backgroundSize = "cover";
       avatar.style.backgroundPosition = "center";
       avatar.textContent = "";
@@ -696,9 +716,13 @@ function clearTopbarIdentity() {
 
 async function saveAnalysis(uid, analysis, histEntry) {
   if (!uid || !analysis) return;
+  // _history is already stored in resumeAnalysisHistory (and re-attached on
+  // load) — persisting it inside resumeAnalysis too grows the student doc
+  // quadratically toward Firestore's 1 MiB cap.
+  const { _history, _uid, ...toSave } = analysis;
   try {
     await setDoc(doc(db, "students", uid), {
-      resumeAnalysis: analysis,
+      resumeAnalysis: toSave,
       resumeAnalysisHistory: arrayUnion(histEntry),
     }, { merge: true });
   } catch (e) { console.warn("[resume] save:", e?.message); }
@@ -715,7 +739,7 @@ function init() {
 
   loadRoleSelector();
 
-  btn.addEventListener("click", () => fileInput.click());
+  btn.addEventListener("click", () => { if (!analyzing) fileInput.click(); });
   $("raClearBtn")?.addEventListener("click", () => {
     setState("idle");
     $("raFileName").style.display = "none";
@@ -733,7 +757,7 @@ function init() {
   document.getElementById("aiAnalyzerLink")?.addEventListener("click", triggerAnalyzer);
 
   async function handlePdfFile(f) {
-    if (!f) return;
+    if (!f || analyzing) return;
     if (!/pdf/i.test(f.type) && !/\.pdf$/i.test(f.name)) { showError("Please upload a PDF file."); return; }
     if (f.size > 3 * 1024 * 1024) { showError("PDF is too large. Keep it under 3 MB."); return; }
     try { await runAnalysis(await readAsDataURL(f), f.name); }
@@ -749,7 +773,7 @@ function init() {
   // Drop zone: click to open picker, drag-and-drop to upload.
   const dropZone = $("raDropZone");
   if (dropZone) {
-    dropZone.addEventListener("click", () => fileInput.click());
+    dropZone.addEventListener("click", () => { if (!analyzing) fileInput.click(); });
     dropZone.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); }
     });

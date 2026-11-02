@@ -20,70 +20,29 @@
     }
 
     header.classList.remove("is-compact");
-    document.documentElement.style.setProperty(
-      "--nav-height",
-      header.offsetHeight + "px",
-    );
-    window.addEventListener("resize", () => {
-      document.documentElement.style.setProperty(
-        "--nav-height",
-        header.offsetHeight + "px",
-      );
-    });
-    return;
 
+    // Keep --nav-height in sync with the header. Resize fires many times per
+    // second while dragging, so coalesce reads of offsetHeight into one per
+    // animation frame. (The old scroll-driven "compact header" behaviour was
+    // disabled and has been removed.)
+    let navHeightPending = false;
     const setNavHeight = () => {
+      navHeightPending = false;
       document.documentElement.style.setProperty(
         "--nav-height",
         header.offsetHeight + "px",
       );
     };
     setNavHeight();
-    window.addEventListener("resize", setNavHeight);
-
-    const EDGE_TOP = 8;
-    const BUFFER = 10;
-    let lastY = window.scrollY || 0;
-    let lastDir = 0;
-    let ticking = false;
-    let isCompact = false;
-
-    const applyState = (compact) => {
-      if (compact === isCompact) return;
-      isCompact = compact;
-      header.classList.toggle("is-compact", compact);
-      setNavHeight();
-    };
-
-    const update = () => {
-      const y = Math.max(0, window.scrollY || 0);
-      const dy = y - lastY;
-
-      if (y <= EDGE_TOP) {
-        applyState(false);
-      } else if (Math.abs(dy) >= BUFFER) {
-        if (dy > 0) {
-          applyState(true);
-          lastDir = 1;
-        } else {
-          applyState(false);
-          lastDir = -1;
-        }
-        lastY = y;
-      }
-
-      ticking = false;
-    };
-
-    const onScroll = () => {
-      if (!ticking) {
-        requestAnimationFrame(update);
-        ticking = true;
-      }
-    };
-
-    update();
-    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener(
+      "resize",
+      () => {
+        if (navHeightPending) return;
+        navHeightPending = true;
+        requestAnimationFrame(setNavHeight);
+      },
+      { passive: true },
+    );
   }
 
   // dynamic logo animation
@@ -108,6 +67,9 @@
 
     const wireLogo = (el) => {
       if (!el || el.__logoWired) return;
+      // A logo inside a wired .brand is already handled by the parent's
+      // listener — wiring both ran the animation + scroll twice per click.
+      if (el !== el.closest(".brand") && el.closest(".brand")) return;
       el.__logoWired = true;
 
       el.addEventListener("click", (evt) => {

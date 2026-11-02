@@ -42,7 +42,11 @@ exports.deleteAuthUser = functions.https.onCall(async (data, context) => {
     .collection("users")
     .doc(context.auth.uid)
     .get();
-  if (!callerSnap.exists || callerSnap.data().role !== "admin") {
+  // Suspended admins lose the privilege too (mirrors isAdmin() in
+  // firestore.rules).
+  if (!callerSnap.exists
+      || callerSnap.data().role !== "admin"
+      || callerSnap.data().disabled === true) {
     throw new functions.https.HttpsError(
       "permission-denied",
       "Only admins can delete users.",
@@ -50,7 +54,7 @@ exports.deleteAuthUser = functions.https.onCall(async (data, context) => {
   }
 
   const targetUid = String(data?.uid || "").trim();
-  if (!targetUid) {
+  if (!targetUid || targetUid.length > 128) {
     throw new functions.https.HttpsError(
       "invalid-argument",
       "Missing target uid.",

@@ -211,6 +211,10 @@ document.addEventListener("DOMContentLoaded", () => {
       desc:        d.desc        || d.description || "No description provided.",
       skills,
       status:      d.status      || "Open",
+      // Company-uploaded banner (dashboard-company writes `heroImage`).
+      // Only http(s) URLs are trusted; anything else falls back to the
+      // deterministic stock image.
+      heroImage:   /^https?:\/\//i.test(String(d.heroImage || "")) ? d.heroImage : "",
     };
   }
 
@@ -255,7 +259,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       el.innerHTML = `
         <div class="job-img-wrap" aria-hidden="true">
-          <img class="job-img" src="${heroImg}" alt="" loading="lazy"
+          <img class="job-img" src="${safe(heroImg)}" alt="" loading="lazy" decoding="async"
+               width="400" height="140"
                onerror="this.parentElement.style.display='none'">
         </div>
         <div class="job-top">
@@ -476,7 +481,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   clearBtn?.addEventListener("click", () => resetBtn?.click());
 
-  searchInput?.addEventListener("input", filterJobs);
+  // Debounced so typing doesn't rebuild every card on each keystroke.
+  let searchDebounce = null;
+  searchInput?.addEventListener("input", () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(filterJobs, 150);
+  });
 
   // ── Missing-skills deep link ───────────────────────────────────────────────
   // Renders / removes the "Showing roles needing any of: …" banner above
@@ -491,7 +501,7 @@ document.addEventListener("DOMContentLoaded", () => {
       banner.style.cssText = "margin:0 0 14px;padding:10px 14px;border-radius:12px;background:rgba(124,107,255,0.08);border:1px solid rgba(124,107,255,0.22);display:flex;align-items:center;gap:10px;font-size:13px;flex-wrap:wrap";
       resultsSection.insertBefore(banner, resultsSection.firstChild);
     }
-    const labels = skills.map((s) => `<span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:rgba(124,107,255,0.16);color:var(--brand);font-size:11.5px;font-weight:600">${s}</span>`).join(" ");
+    const labels = skills.map((s) => `<span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:rgba(124,107,255,0.16);color:var(--brand);font-size:11.5px;font-weight:600">${safe(s)}</span>`).join(" ");
     banner.innerHTML = `
       <span style="opacity:0.85">🎯 Showing roles needing any of:</span>
       <span style="display:inline-flex;gap:6px;flex-wrap:wrap">${labels}</span>
@@ -537,15 +547,20 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // Per-user listeners — torn down when the auth user changes so a
+  // sign-out / sign-in in the same tab doesn't stack duplicate listeners.
+  let userUnsubs = [];
   onAuthStateChanged(auth, (user) => {
-    if (!user) return;
+    userUnsubs.forEach((u) => { try { u(); } catch {} });
+    userUnsubs = [];
+    if (!user) { currentUid = null; return; }
     currentUid = user.uid;
 
     const appsQ = query(
       collection(db, "applications"),
       where("studentId", "==", user.uid),
     );
-    onSnapshot(appsQ, (snap) => {
+    userUnsubs.push(onSnapshot(appsQ, (snap) => {
       for (const k of Object.keys(myAppStatus)) delete myAppStatus[k];
       snap.forEach((d) => {
         const data = d.data();
@@ -556,9 +571,9 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
       if (jobs.length) filterJobs();
-    });
+    }, (err) => console.warn("[apps] listener:", err?.message)));
 
-    onSnapshot(doc(db, "students", user.uid), (snap) => {
+    userUnsubs.push(onSnapshot(doc(db, "students", user.uid), (snap) => {
       const studentData = snap.exists() ? snap.data() : {};
       savedSet.clear();
       const saved = studentData.savedInternships || [];
@@ -579,7 +594,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       if (jobs.length) filterJobs();
-    });
+    }, (err) => console.warn("[student] listener:", err?.message)));
   });
 
   // report handler

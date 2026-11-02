@@ -35,6 +35,29 @@ import { esc } from "./lib/escape.js";
 
 requireRole(["student", "dev"]);
 
+// Halloween cinematic module loader. Defined at module evaluation time
+// (before DOMContentLoaded) so theme.js can trigger it as soon as it applies
+// the saved/seasonal theme, instead of waiting on the auth round-trip.
+window.__loadHalloweenFX = async function () {
+  if (window.__halloweenFXLoaded) return;
+  window.__halloweenFXLoaded = true;
+  try {
+    await import("./internal-analytics.js");
+  } catch (_) { /* silent */ }
+};
+
+// users/{uid} is needed by several init paths (settings prefill, topbar,
+// TARS console). Share one in-flight read instead of fetching it 3×.
+const _userSnapCache = new Map();
+function getUserSnap(uid) {
+  if (!_userSnapCache.has(uid)) {
+    const p = getDoc(doc(db, "users", uid));
+    p.catch(() => _userSnapCache.delete(uid));
+    _userSnapCache.set(uid, p);
+  }
+  return _userSnapCache.get(uid);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
 
   // sidebar drawer
@@ -279,16 +302,22 @@ const tableBody = document.getElementById("applicationsTableBody");
     });
   }
 
+  let _appsSnapSeq = 0;
   function subscribeToApps(user) {
     const appsQ = query(
       collection(db, "applications"),
       where("studentId", "==", user.uid)
     );
     onSnapshot(appsQ, async (snap) => {
+      // enrichApps is async — drop results from an older snapshot that
+      // resolves after a newer one so the table never regresses.
+      const seq = ++_appsSnapSeq;
       const rawApps = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      apps = await enrichApps(rawApps);
+      const enriched = await enrichApps(rawApps);
+      if (seq !== _appsSnapSeq) return;
+      apps = enriched;
       renderApps();
-    });
+    }, (err) => console.error("applications subscription:", err));
   }
 
   function updateViewAllBtn(shown, total) {
@@ -497,11 +526,13 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // auth check
+let _settingsUid = null;
 onAuthStateChanged(auth, async (user) => {
   if (sessionStorage.getItem("guestRole")) return;
   if (!user) {
     window.location.href = "./login.html";
-  } else {
+  } else if (_settingsUid !== user.uid) {
+    _settingsUid = user.uid;
     loadUserData(user);
     injectUserIntoUI(user);
   }
@@ -642,7 +673,7 @@ setTimeout(() => {
     try { sessionStorage.removeItem("guestRole"); } catch {}
     try { sessionStorage.removeItem("guestGreetingShown"); } catch {}
     await signOut(auth);
-    localStorage.removeItem("currentUser");
+    try { localStorage.removeItem("currentUser"); } catch {}
     window.location.href = "./Index.html";
   });
 
@@ -652,14 +683,14 @@ setTimeout(() => {
 async function loadUserData(user) {
   try {
     const userRef = doc(db, "users", user.uid);
-    const snap = await getDoc(userRef);
+    const snap = await getUserSnap(user.uid);
 
     if (!snap.exists()) return;
 
     let data = snap.data();
     let currentName = data.name || "";
 
-    if (!currentName || /\d/.test(currentName)) {
+    if ((!currentName || /\d/.test(currentName)) && user.email) {
       const raw = user.email.split("@")[0];
 
       const cleanName = raw
@@ -700,7 +731,7 @@ function showStatus(el, msg, type) {
 
 async function injectUserIntoUI(user) {
   try {
-    const snap = await getDoc(doc(db, "users", user.uid));
+    const snap = await getUserSnap(user.uid);
     if (!snap.exists()) return;
 
     const data = snap.data();
@@ -727,7 +758,7 @@ async function injectUserIntoUI(user) {
     if (tarsAtsEl) tarsAtsEl.textContent = `${ats}%`;
 
     const currentUser = { name, roleLabel, email: user.email || "" };
-    localStorage.setItem("currentUser", JSON.stringify(currentUser));
+    try { localStorage.setItem("currentUser", JSON.stringify(currentUser)); } catch {}
 
   } catch (err) {
     console.error("UI Inject Error:", err);
@@ -754,10 +785,6 @@ function showToast(message, type = "info", duration = 3000) {
   }, duration);
 }
 
-showToast("Profile updated", "success");
-showToast("Invalid password", "error");
-showToast("Loading data...", "loading");
-
 // feedback
 
 const feedbackBtn = document.getElementById("openFeedback");
@@ -766,10 +793,11 @@ feedbackBtn?.addEventListener("click", (e) => {
   e.preventDefault();
 
   const modal = document.getElementById("settingsModal");
-  const supportSection = document.getElementById("supportSection");
   const textarea = document.getElementById("contactUsMessage");
+  const supportSection = document.getElementById("supportSection")
+    || textarea?.closest(".settings-section");
 
-  modal.classList.add("show");
+  modal?.classList.add("show");
 
   setTimeout(() => {
     supportSection?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -965,7 +993,7 @@ async function initTars() {
     const user = auth.currentUser;
     if (!user) return;
 
-    const snap = await getDoc(doc(db, "users", user.uid));
+    const snap = await getUserSnap(user.uid);
     if (!snap.exists()) return;
 
     const data = snap.data();
@@ -1032,7 +1060,8 @@ if (isDev) {
     showMessage(getRandomMessage());
 
     setInterval(() => {
-      if (isTyping) return;
+      // Skip rotations while the tab is hidden — nobody can read them.
+      if (isTyping || document.hidden) return;
       showMessage(getRandomMessage());
     }, 6500);
 
@@ -1041,8 +1070,13 @@ if (isDev) {
   }
 }
 
+// onAuthStateChanged can fire more than once for the same user; only wire
+// the listeners / intervals once per uid so they don't stack up.
+let _bootedUid = null;
 onAuthStateChanged(auth, (user) => {
   if (!user) return;
+  if (_bootedUid === user.uid) return;
+  _bootedUid = user.uid;
 
   initTars();
   setupNotifications(user);
@@ -1055,17 +1089,10 @@ onAuthStateChanged(auth, (user) => {
 // every signed-in user. It's still lazy-loaded — only fetched the moment
 // the visitor actually selects the Halloween theme (see theme.js) — so
 // people who never touch that option don't pay for the extra assets.
-// This function is kept as a no-op hook called from the auth listener;
-// actual loading is triggered by theme.js via window.__loadHalloweenFX().
+// The loader (window.__loadHalloweenFX) is defined at the top of this
+// module; this hook just catches the case where theme.js applied the
+// Halloween theme before the loader existed.
 async function _maybeLoadInternal(_uid) {
-  window.__loadHalloweenFX = async function () {
-    if (window.__halloweenFXLoaded) return;
-    window.__halloweenFXLoaded = true;
-    try {
-      await import("./internal-analytics.js");
-    } catch (_) { /* silent */ }
-  };
-
   // If the visitor's saved/defaulted theme is already "halloween" on this
   // load, kick it off immediately instead of waiting for a toggle click.
   try {
@@ -1082,15 +1109,27 @@ function setupNotifications(user) {
   const notifList     = document.getElementById("notifList");
   const markAllBtn    = document.getElementById("markAllRead");
 
+  if (!notifDropdown || !notifBadge || !notifList) return;
+
   notifBtn?.addEventListener("click", (e) => {
     e.stopPropagation();
     notifDropdown.classList.toggle("hidden");
   });
 
   document.addEventListener("click", (e) => {
-    if (!notifDropdown?.contains(e.target) && e.target !== notifBtn) {
+    if (!notifDropdown.contains(e.target) && e.target !== notifBtn) {
       notifDropdown.classList.add("hidden");
     }
+  });
+
+  // One delegated handler instead of re-binding a listener on every item
+  // each time the snapshot re-renders the list.
+  notifList.addEventListener("click", (e) => {
+    const item = e.target instanceof Element ? e.target.closest(".notif-item") : null;
+    const id = item?.getAttribute("data-id");
+    if (!id || item.classList.contains("read")) return;
+    updateDoc(doc(db, "notifications", id), { isRead: true })
+      .catch((err) => console.error("mark notification read:", err));
   });
 
   const q = query(
@@ -1166,29 +1205,27 @@ function setupNotifications(user) {
         </div>
       `;
     }).join("");
-
-    notifList.querySelectorAll(".notif-item").forEach(item => {
-      item.addEventListener("click", async () => {
-        const id = item.getAttribute("data-id");
-        await updateDoc(doc(db, "notifications", id), { isRead: true });
-      });
-    });
-  });
+  }, (err) => console.error("notifications subscription:", err));
 
   markAllBtn?.addEventListener("click", async () => {
-    const batch = writeBatch(db);
+    try {
+      const batch = writeBatch(db);
 
-    const snap2 = await getDocs(query(
-      collection(db, "notifications"),
-      where("studentId", "==", user.uid),
-      where("isRead", "==", false)
-    ));
+      const snap2 = await getDocs(query(
+        collection(db, "notifications"),
+        where("studentId", "==", user.uid),
+        where("isRead", "==", false)
+      ));
+      if (snap2.empty) return;
 
-    snap2.forEach(d => {
-      batch.update(d.ref, { isRead: true });
-    });
+      snap2.forEach(d => {
+        batch.update(d.ref, { isRead: true });
+      });
 
-    await batch.commit();
+      await batch.commit();
+    } catch (err) {
+      console.error("mark all notifications read:", err);
+    }
   });
 }
 
@@ -1208,7 +1245,7 @@ document.querySelector(".logout")?.addEventListener("click", async () => {
     sessionStorage.removeItem("guestRole");
     sessionStorage.removeItem("guestGreetingShown");
     await signOut(auth);
-    localStorage.removeItem("currentUser");
+    try { localStorage.removeItem("currentUser"); } catch {}
     window.location.href = "./Index.html";
   }, 1200);
 });
@@ -1240,8 +1277,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // virtual workroom button
 const workroomBtn = document.getElementById('enterWorkroom');
-workroomBtn.addEventListener('click', () => {
-  window.location.href = '/virtualworkroom.html';
+workroomBtn?.addEventListener('click', () => {
+  window.location.href = 'virtualworkroom.html';
 });
 
 
@@ -1359,8 +1396,6 @@ async function resolveCompanyNames(apps) {
 }
 
 async function loadKPIs(user) {
-  const kpiAppsVal   = document.querySelector(".kpi:nth-child(1) .kpi-val");
-  const kpiAppsSubEl = document.querySelector(".kpi:nth-child(1) .kpi-sub");
   const kpiTasksVal  = document.querySelector(".kpi:nth-child(2) .kpi-val");
   const kpiTasksSubEl= document.querySelector(".kpi:nth-child(2) .kpi-sub");
   const kpiProgVal   = document.querySelector(".kpi:nth-child(3) .kpi-val");
@@ -1368,31 +1403,10 @@ async function loadKPIs(user) {
   const kpiRoleVal   = document.querySelector(".kpi:nth-child(4) .kpi-val");
   const kpiRoleSubEl = document.querySelector(".kpi:nth-child(4) .kpi-sub");
 
-  // ── 1. Applications KPI ── read from Firestore, NOT localStorage
-  try {
-    const appsQ = query(
-      collection(db, "applications"),
-      where("studentId", "==", user.uid)
-    );
-    onSnapshot(appsQ, (snap) => {
-      const apps = snap.docs.map(d => d.data());
-      const total    = apps.length;
-      const approved = apps.filter(a => a.status === "Approved").length;
-      const rejected = apps.filter(a => a.status === "Rejected").length;
-      const pending  = apps.filter(a => a.status === "Pending" || !a.status).length;
-
-      if (kpiAppsVal) kpiAppsVal.textContent = total;
-      if (kpiAppsSubEl) {
-        const parts = [];
-        if (approved) parts.push(`${approved} approved`);
-        if (rejected) parts.push(`${rejected} rejected`);
-        if (pending)  parts.push(`${pending} pending`);
-        kpiAppsSubEl.textContent = parts.join(" · ") || "No applications yet";
-      }
-    });
-  } catch (err) {
-    console.error("KPI applications error:", err);
-  }
+  // ── 1. Applications KPI ── rendered by js/student-activity.js
+  // (renderApplicationsKpi) from its own applications listener. A second
+  // writer here used different wording/counts and the two raced on every
+  // snapshot, so the card flickered between them.
 
   // ── 2. Tasks KPI ── read taskSubmissions collection
   try {
@@ -1429,7 +1443,12 @@ async function loadKPIs(user) {
       where("studentId", "==", user.uid)
     );
 
+    let roleSeq = 0;
     onSnapshot(activeAppQ, async (rawSnap) => {
+      // Async handler — ignore results from a stale snapshot if a newer one
+      // arrived while this one was still awaiting Firestore reads.
+      const seq = ++roleSeq;
+      const isStale = () => seq !== roleSeq;
       const snap = {
         empty: rawSnap.docs.every((d) => d.data().status !== "Approved"),
         docs: rawSnap.docs.filter((d) => d.data().status === "Approved"),
@@ -1450,6 +1469,7 @@ async function loadKPIs(user) {
       // ── Active Role KPI ── stack each role on its own line, latest first.
       // Resolve company names up-front so sub-line + per-line pairings match.
       const companyByApp = await _resolveCompanyByApp(approvedApps);
+      if (isStale()) return;
 
       // Only show the two most recent internships — enough to be informative
       // without overflowing the compact KPI card.
@@ -1525,6 +1545,8 @@ async function loadKPIs(user) {
             })
         );
 
+        if (isStale()) return;
+
         // Prefer internships with tasks; among those, pick the one with the
         // highest task count (most "active"). If none have tasks yet, fall
         // back to the newest approved app so we still say something useful.
@@ -1550,6 +1572,7 @@ async function loadKPIs(user) {
             duration = d.duration || d.durationKey || "";
           }
         } catch (_) {}
+        if (isStale()) return;
 
         if (kpiProgSubEl) {
           const approvedCount = pick.approvedSubs;

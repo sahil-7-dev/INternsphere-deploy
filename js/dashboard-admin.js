@@ -4,12 +4,10 @@ import { requireAdmin } from "./guard.js";
 import { auth, db } from "../firebase/firebase.js";
 import {
   collection,
-  query,
-  where,
   onSnapshot,
   getDoc,
-  getDocs,
   doc,
+  setDoc,
   updateDoc,
   deleteDoc,
   addDoc,
@@ -104,7 +102,11 @@ let CURRENT_ADMIN_NAME  = "Admin";
 let CURRENT_ADMIN_EMAIL = "";
 
 onAuthStateChanged(auth, async (user) => {
-  if (!user) return;
+  if (!user) {
+    stopSubscriptions();
+    CURRENT_UID = null;
+    return;
+  }
   CURRENT_UID = user.uid;
   CURRENT_ADMIN_EMAIL = user.email || "";
   try {
@@ -114,15 +116,24 @@ onAuthStateChanged(auth, async (user) => {
     CURRENT_ADMIN_NAME = name;
     $("adminName").textContent = name;
     paintAdminAvatar(d.profilePic || "", name);
+    // Only open the (collection-wide) listeners once the caller is
+    // confirmed as an active admin — non-admins are redirected by
+    // requireAdmin() and would otherwise just burn denied reads.
+    if (d.role === "admin" && d.disabled !== true) startSubscriptions();
   } catch (_) { }
 });
+
+// strip characters that could break out of the CSS url("…") wrapper
+function cssUrl(pic) {
+  return `url("${String(pic).replace(/["\\\n\r]/g, "")}")`;
+}
 
 function paintAdminAvatar(pic, name) {
   const el = $("adminAvatar");
   if (!el) return;
   const initial = (name || CURRENT_ADMIN_NAME || "A").charAt(0).toUpperCase();
   if (pic) {
-    el.style.backgroundImage = `url("${pic}")`;
+    el.style.backgroundImage = cssUrl(pic);
     el.classList.add("has-pic");
     el.textContent = initial;
   } else {
@@ -143,70 +154,105 @@ function onSnapErr(tableSelector, collName) {
         <tr><td colspan="6" class="admin-hint" style="color:#ef4444">
           Could not load ${esc(collName)} — <b>${esc(err.code || "error")}</b>.
           <br><small>Most likely your Firestore rules don't grant admin reads on <code>${esc(collName)}</code>.
-          See the comment at the bottom of <code>js/dashboard-admin.js</code> for the rules you need.</small>
+          Check <code>firestore.rules</code> and that your users doc has <code>role: "admin"</code>.</small>
         </td></tr>`;
     }
   };
 }
 
-onSnapshot(
-  collection(db, "users"),
-  (snap) => {
-    const raw = [];
-    snap.forEach((d) => raw.push({ uid: d.id, ...d.data() }));
-    users = raw;
-    renderStats();
-    renderUsers();
-  },
-  onSnapErr("#usersTable tbody", "users"),
-);
+let _unsubs = [];
 
-onSnapshot(
-  collection(db, "students"),
-  (snap) => {
-    students = {};
-    snap.forEach((d) => { students[d.id] = d.data(); });
-    renderUsers();
-  },
-  onSnapErr("#usersTable tbody", "students"),
-);
+function stopSubscriptions() {
+  _unsubs.forEach((fn) => { try { fn(); } catch (_) {} });
+  _unsubs = [];
+}
 
-onSnapshot(
-  collection(db, "companies"),
-  (snap) => {
-    companies = {};
-    snap.forEach((d) => { companies[d.id] = d.data(); });
-    renderStats();
-    renderUsers();
-    renderVerification();
-  },
-  onSnapErr("#verifyTable tbody", "companies"),
-);
+function startSubscriptions() {
+  if (_unsubs.length) return; // already running
 
-onSnapshot(
-  collection(db, "supportMessages"),
-  (snap) => {
-    supportMsgs = [];
-    snap.forEach((d) => supportMsgs.push({ id: d.id, ...d.data() }));
-    supportMsgs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-    renderStats();
-    renderSupport();
-    paintSupportBadge();
-  },
-  onSnapErr("#supportTable tbody", "supportMessages"),
-);
+  _unsubs.push(onSnapshot(
+    collection(db, "users"),
+    (snap) => {
+      const raw = [];
+      snap.forEach((d) => raw.push({ uid: d.id, ...d.data() }));
+      users = raw;
+      renderStats();
+      renderUsers();
+      // The verification queue and support role badges are derived
+      // from `users` too — without this they stayed stale/empty when
+      // the users snapshot landed after the companies one.
+      renderVerification();
+      renderSupport();
+    },
+    onSnapErr("#usersTable tbody", "users"),
+  ));
 
-onSnapshot(
-  collection(db, "reports"),
-  (snap) => {
-    reports = [];
-    snap.forEach((d) => reports.push({ id: d.id, ...d.data() }));
-    reports.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-    renderModeration();
-    paintModerationBadge();
-  },
-  onSnapErr("#modTable tbody", "reports"),
-);
+  // NOTE: the whole `students` collection used to be subscribed here just
+  // to fall back to students/{uid}.name. Those docs carry resume analyses
+  // and other heavy fields, so names are now fetched lazily (see
+  // ensureStudentNames) for the visible page of rows only.
+
+  _unsubs.push(onSnapshot(
+    collection(db, "companies"),
+    (snap) => {
+      companies = {};
+      snap.forEach((d) => { companies[d.id] = d.data(); });
+      renderStats();
+      renderUsers();
+      renderVerification();
+    },
+    onSnapErr("#verifyTable tbody", "companies"),
+  ));
+
+  _unsubs.push(onSnapshot(
+    collection(db, "supportMessages"),
+    (snap) => {
+      supportMsgs = [];
+      snap.forEach((d) => supportMsgs.push({ id: d.id, ...d.data() }));
+      supportMsgs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      renderStats();
+      renderSupport();
+      paintSupportBadge();
+    },
+    onSnapErr("#supportTable tbody", "supportMessages"),
+  ));
+
+  _unsubs.push(onSnapshot(
+    collection(db, "reports"),
+    (snap) => {
+      reports = [];
+      snap.forEach((d) => reports.push({ id: d.id, ...d.data() }));
+      reports.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      renderModeration();
+      paintModerationBadge();
+    },
+    onSnapErr("#modTable tbody", "reports"),
+  ));
+}
+
+// lazy student-name lookup (replaces the full `students` subscription)
+const studentNameInflight = new Set();
+let _usersRenderQueued = false;
+
+function queueRenderUsers() {
+  if (_usersRenderQueued) return;
+  _usersRenderQueued = true;
+  requestAnimationFrame(() => { _usersRenderQueued = false; renderUsers(); });
+}
+
+function ensureStudentNames(rows) {
+  const missing = rows.filter((u) =>
+    !u.name && u.role !== "company" &&
+    !(u.uid in students) && !studentNameInflight.has(u.uid));
+  if (!missing.length) return;
+  missing.forEach((u) => studentNameInflight.add(u.uid));
+  Promise.all(missing.map((u) =>
+    getDoc(doc(db, "students", u.uid))
+      .then((s) => { students[u.uid] = s.exists() ? { name: s.data().name || "" } : {}; })
+      .catch(() => { students[u.uid] = {}; })
+      .finally(() => studentNameInflight.delete(u.uid)),
+  )).then(queueRenderUsers);
+}
 
 // stats
 
@@ -299,11 +345,15 @@ function renderUsers() {
     return;
   }
 
+  ensureStudentNames(pageRows);
+
   tbody.innerHTML = pageRows.map((u) => {
     const enriched = (u.role === "company" ? companies[u.uid] : students[u.uid]) || {};
     const name    = u.name || enriched.name || u.email?.split("@")[0] || "—";
     const status  = u.disabled === true ? "disabled" : "active";
-    const roleKey = u.role || "student";
+    // role is user-controlled data and lands in a class attribute —
+    // whitelist it so it can't break out of the markup.
+    const roleKey = ["admin", "company", "dev"].includes(u.role) ? u.role : "student";
     const roleLabel = roleKey === "admin"   ? "Admin"
                     : roleKey === "company" ? "Company"
                     : roleKey === "dev"     ? "Dev"
@@ -349,8 +399,12 @@ document.querySelector("#usersTable").addEventListener("click", async (e) => {
   if (act === "toggle") {
     const next = !(user.disabled === true);
     if (!confirm(`${next ? "Suspend" : "Reinstate"} ${user.email}?`)) return;
-    await updateDoc(doc(db, "users", uid), { disabled: next });
-    await logAdminAction(next ? "suspend" : "reinstate", { uid, email: user.email });
+    try {
+      await updateDoc(doc(db, "users", uid), { disabled: next });
+      await logAdminAction(next ? "suspend" : "reinstate", { uid, email: user.email });
+    } catch (err) {
+      showAdminNotice("Update failed", err.message || String(err));
+    }
   }
 
   if (act === "role") {
@@ -366,8 +420,12 @@ document.querySelector("#usersTable").addEventListener("click", async (e) => {
       alert("Invalid role. Must be one of: admin, company, student, dev.");
       return;
     }
-    await updateDoc(doc(db, "users", uid), { role: val });
-    await logAdminAction("role-change", { uid, email: user.email, from: current, to: val });
+    try {
+      await updateDoc(doc(db, "users", uid), { role: val });
+      await logAdminAction("role-change", { uid, email: user.email, from: current, to: val });
+    } catch (err) {
+      showAdminNotice("Role change failed", err.message || String(err));
+    }
   }
 
   if (act === "delete") {
@@ -384,12 +442,10 @@ document.querySelector("#usersTable").addEventListener("click", async (e) => {
     }
 
     try {
-      await deleteDoc(doc(db, "users", uid));
-      if (user.role === "company") {
-        await deleteDoc(doc(db, "companies", uid)).catch(() => {});
-      } else {
-        await deleteDoc(doc(db, "students", uid)).catch(() => {});
-      }
+      await Promise.all([
+        deleteDoc(doc(db, "users", uid)),
+        deleteDoc(doc(db, user.role === "company" ? "companies" : "students", uid)).catch(() => {}),
+      ]);
       await logAdminAction("delete-user", {
         uid,
         email: user.email,
@@ -503,59 +559,62 @@ document.querySelector("#verifyTable").addEventListener("click", async (e) => {
   if (!user) return;
   const act = btn.dataset.vact;
 
-  const setCompany = async (patch) => {
-    const mod = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js");
-    await mod.setDoc(doc(db, "companies", uid), patch, { merge: true });
-  };
+  const setCompany = (patch) =>
+    setDoc(doc(db, "companies", uid), patch, { merge: true });
 
-  if (act === "approve") {
-    if (!confirm(`Approve ${user.email} as a verified company?`)) return;
-    await setCompany({ verified: true, rejected: false, rejectReason: "" });
-    await addDoc(collection(db, "notifications"), {
-      studentId: uid,
-      companyId: uid,
-      message: "Your company account was verified — you can now post internships.",
-      kind: "verify-approved",
-      senderUid:  CURRENT_UID,
-      senderRole: "admin",
-      senderName: "InternSphere Admin",
-      isRead: false,
-      createdAt: serverTimestamp(),
-    });
-    await logAdminAction("approve-company", { uid, email: user.email });
-  }
+  try {
+    if (act === "approve") {
+      if (!confirm(`Approve ${user.email} as a verified company?`)) return;
+      await setCompany({ verified: true, rejected: false, rejectReason: "" });
+      await addDoc(collection(db, "notifications"), {
+        studentId: uid,
+        companyId: uid,
+        message: "Your company account was verified — you can now post internships.",
+        kind: "verify-approved",
+        senderUid:  CURRENT_UID,
+        senderRole: "admin",
+        senderName: "InternSphere Admin",
+        isRead: false,
+        createdAt: serverTimestamp(),
+      });
+      await logAdminAction("approve-company", { uid, email: user.email });
+    }
 
-  if (act === "reject") {
-    const reason = prompt(
-      `Reject ${user.email}?\n\nOptional reason (shown in the admin queue and in a notification to the company):`,
-      ""
-    );
-    if (reason === null) return;
-    await setCompany({
-      rejected: true,
-      rejectReason: reason.trim().slice(0, 400),
-      verified: false,
-    });
-    await addDoc(collection(db, "notifications"), {
-      studentId: uid,
-      companyId: uid,
-      message: reason.trim()
-        ? `Your company verification was not approved — reason: ${reason.trim()}`
-        : "Your company verification was not approved. Contact support for details.",
-      kind: "verify-rejected",
-      senderUid:  CURRENT_UID,
-      senderRole: "admin",
-      senderName: "InternSphere Admin",
-      isRead: false,
-      createdAt: serverTimestamp(),
-    });
-    await logAdminAction("reject-company", { uid, email: user.email, reason: reason.trim() });
-  }
+    if (act === "reject") {
+      const reason = prompt(
+        `Reject ${user.email}?\n\nOptional reason (shown in the admin queue and in a notification to the company):`,
+        ""
+      );
+      if (reason === null) return;
+      await setCompany({
+        rejected: true,
+        rejectReason: reason.trim().slice(0, 400),
+        verified: false,
+      });
+      await addDoc(collection(db, "notifications"), {
+        studentId: uid,
+        companyId: uid,
+        message: reason.trim()
+          ? `Your company verification was not approved — reason: ${reason.trim()}`
+          : "Your company verification was not approved. Contact support for details.",
+        kind: "verify-rejected",
+        senderUid:  CURRENT_UID,
+        senderRole: "admin",
+        senderName: "InternSphere Admin",
+        isRead: false,
+        createdAt: serverTimestamp(),
+      });
+      await logAdminAction("reject-company", { uid, email: user.email, reason: reason.trim() });
+    }
 
-  if (act === "reinstate") {
-    if (!confirm(`Reinstate ${user.email} back into the pending queue?`)) return;
-    await setCompany({ rejected: false, rejectReason: "" });
-    await logAdminAction("reinstate-company", { uid, email: user.email });
+    if (act === "reinstate") {
+      if (!confirm(`Reinstate ${user.email} back into the pending queue?`)) return;
+      await setCompany({ rejected: false, rejectReason: "" });
+      await logAdminAction("reinstate-company", { uid, email: user.email });
+    }
+  } catch (err) {
+    showAdminNotice("Action failed", err.message || String(err));
+    return;
   }
 
   if (act === "delete") {
@@ -568,8 +627,10 @@ document.querySelector("#verifyTable").addEventListener("click", async (e) => {
       } catch (err) {
         authError = err.code || err.message || "unknown";
       }
-      await deleteDoc(doc(db, "users", uid));
-      await deleteDoc(doc(db, "companies", uid)).catch(() => {});
+      await Promise.all([
+        deleteDoc(doc(db, "users", uid)),
+        deleteDoc(doc(db, "companies", uid)).catch(() => {}),
+      ]);
       await logAdminAction("delete-rejected-company", {
         uid, email: user.email, authRemoved, authError,
       });
@@ -681,12 +742,17 @@ $("supportModal")?.addEventListener("click", (e) => {
 
 $("sm_resolve")?.addEventListener("click", async () => {
   if (!modalMsg) return;
-  await updateDoc(doc(db, "supportMessages", modalMsg.id), {
-    resolvedAt: serverTimestamp(),
-    resolvedBy: CURRENT_UID,
-  });
-  await logAdminAction("support-resolve", { msgId: modalMsg.id, email: modalMsg.email });
-  closeSupportModal();
+  const m = modalMsg;
+  try {
+    await updateDoc(doc(db, "supportMessages", m.id), {
+      resolvedAt: serverTimestamp(),
+      resolvedBy: CURRENT_UID,
+    });
+    await logAdminAction("support-resolve", { msgId: m.id, email: m.email });
+    closeSupportModal();
+  } catch (err) {
+    showAdminNotice("Could not resolve", err.message || String(err));
+  }
 });
 
 $("sm_send")?.addEventListener("click", async () => {
@@ -694,25 +760,32 @@ $("sm_send")?.addEventListener("click", async () => {
   const reply = $("sm_reply").value.trim();
   if (!reply) return alert("Reply is empty — use 'Mark resolved' if no reply is needed.");
 
-  await updateDoc(doc(db, "supportMessages", modalMsg.id), {
-    resolvedAt: serverTimestamp(),
-    resolvedBy: CURRENT_UID,
-    adminReply: reply,
-  });
-  if (modalMsg.uid) {
-    await addDoc(collection(db, "notifications"), {
-      studentId: modalMsg.uid,
-      message: `Reply from InternSphere support: ${reply}`,
-      kind: "support-reply",
-      senderUid:  CURRENT_UID,
-      senderRole: "admin",
-      senderName: "InternSphere Support",
-      isRead: false,
-      createdAt: serverTimestamp(),
+  // Capture the message: the modal (and modalMsg) can be closed while
+  // the awaits below are in flight, which used to throw on modalMsg.id.
+  const m = modalMsg;
+  try {
+    await updateDoc(doc(db, "supportMessages", m.id), {
+      resolvedAt: serverTimestamp(),
+      resolvedBy: CURRENT_UID,
+      adminReply: reply,
     });
+    if (m.uid) {
+      await addDoc(collection(db, "notifications"), {
+        studentId: m.uid,
+        message: `Reply from InternSphere support: ${reply}`,
+        kind: "support-reply",
+        senderUid:  CURRENT_UID,
+        senderRole: "admin",
+        senderName: "InternSphere Support",
+        isRead: false,
+        createdAt: serverTimestamp(),
+      });
+    }
+    await logAdminAction("support-reply", { msgId: m.id, email: m.email });
+    closeSupportModal();
+  } catch (err) {
+    showAdminNotice("Reply failed", err.message || String(err));
   }
-  await logAdminAction("support-reply", { msgId: modalMsg.id, email: modalMsg.email });
-  closeSupportModal();
 });
 
 // moderation panel
@@ -766,27 +839,44 @@ async function enrichTarget(report) {
           companyId:       companyId || "",
         },
       } : { type: "submission", data: null });
+    } else {
+      // Unknown target type — cache a miss so we don't re-enter on every render.
+      targetCache.set(key, { type: report.targetType, data: null });
     }
-    renderModeration();
+    queueRenderModeration();
   } catch (err) {
     console.warn("[admin-mod] enrich failed for", key, err);
     targetCache.set(key, { type: report.targetType, data: null });
+    queueRenderModeration();
   } finally {
     targetInflight.delete(key);
   }
 }
 
+// Coalesce the N re-renders triggered by N parallel enrichments into one
+// per frame.
+let _modRenderQueued = false;
+function queueRenderModeration() {
+  if (_modRenderQueued) return;
+  _modRenderQueued = true;
+  requestAnimationFrame(() => { _modRenderQueued = false; renderModeration(); });
+}
+
 function renderTargetCell(r) {
-  const key = `${r.targetType}:${r.targetId}`;
+  const targetId = String(r.targetId || "");
+  const key = `${r.targetType}:${targetId}`;
   const hit = targetCache.get(key);
 
+  if (!targetId) {
+    return `<span style="color:var(--text3)"><i>Report has no target id</i></span>`;
+  }
   if (!hit) {
-    enrichTarget(r);
-    return `<span class="admin-mono" style="opacity:0.6">${esc(r.targetType)} · ${esc(r.targetId.slice(0, 10))}…</span>`;
+    enrichTarget({ ...r, targetId });
+    return `<span class="admin-mono" style="opacity:0.6">${esc(r.targetType)} · ${esc(targetId.slice(0, 10))}…</span>`;
   }
   if (!hit.data) {
     return `<span style="color:var(--text3)"><i>${esc(r.targetType)} no longer exists</i></span>
-            <div class="admin-mono" style="font-size:0.75rem;opacity:0.55">id: ${esc(r.targetId)}</div>`;
+            <div class="admin-mono" style="font-size:0.75rem;opacity:0.55">id: ${esc(targetId)}</div>`;
   }
 
   if (hit.type === "internship") {
@@ -799,7 +889,7 @@ function renderTargetCell(r) {
       </div>
       <div style="margin-top:6px">
         <a class="admin-btn"
-           href="internship-detailss.html?id=${encodeURIComponent(r.targetId)}${d.companyId ? `&companyId=${encodeURIComponent(d.companyId)}` : ""}">View listing →</a>
+           href="internship-detailss.html?id=${encodeURIComponent(targetId)}${d.companyId ? `&companyId=${encodeURIComponent(d.companyId)}` : ""}">View listing →</a>
       </div>
     `;
   }
@@ -811,7 +901,7 @@ function renderTargetCell(r) {
       Company: <b>${esc(d.companyName)}</b>
     </div>
     <div class="admin-mono" style="font-size:0.72rem;opacity:0.55;margin-top:2px">
-      sub: ${esc(r.targetId.slice(0, 14))}…
+      sub: ${esc(targetId.slice(0, 14))}…
     </div>
   `;
 }
@@ -869,34 +959,49 @@ document.querySelector("#modTable").addEventListener("click", async (e) => {
 
   if (act === "dismiss") {
     if (!confirm("Dismiss this report? (No action taken against the target.)")) return;
-    await updateDoc(doc(db, "reports", r.id), {
-      resolvedAt: serverTimestamp(),
-      resolvedBy: CURRENT_UID,
-      resolution: "dismissed",
-    });
-    await logAdminAction("mod-dismiss", { reportId: r.id, targetType: r.targetType, targetId: r.targetId });
+    try {
+      await updateDoc(doc(db, "reports", r.id), {
+        resolvedAt: serverTimestamp(),
+        resolvedBy: CURRENT_UID,
+        resolution: "dismissed",
+      });
+      await logAdminAction("mod-dismiss", { reportId: r.id, targetType: r.targetType, targetId: r.targetId });
+    } catch (err) {
+      showAdminNotice("Dismiss failed", err.message || String(err));
+    }
   }
 
   if (act === "takedown") {
     if (!confirm(`Take down this ${r.targetType}?\n\nThis DELETES the target document permanently.`)) return;
     let takedownError = "";
     try {
-      const coll = r.targetType === "submission" ? "taskSubmissions" : "internships";
-      await deleteDoc(doc(db, coll, r.targetId));
+      // Only delete from a collection we actually know the report points
+      // at — an unknown targetType used to fall through to "internships".
+      const coll = r.targetType === "submission" ? "taskSubmissions"
+                 : r.targetType === "internship" ? "internships"
+                 : null;
+      if (!coll || !r.targetId) throw new Error(`unsupported target "${r.targetType}"`);
+      await deleteDoc(doc(db, coll, String(r.targetId)));
+      targetCache.set(`${r.targetType}:${r.targetId}`, { type: r.targetType, data: null });
     } catch (err) {
       takedownError = err.code || err.message || "unknown";
       console.warn("[admin-moderation] takedown failed:", err);
     }
-    await updateDoc(doc(db, "reports", r.id), {
-      resolvedAt: serverTimestamp(),
-      resolvedBy: CURRENT_UID,
-      resolution: "taken-down",
-      takedownError: takedownError || null,
-    });
-    await logAdminAction("mod-takedown", {
-      reportId: r.id, targetType: r.targetType, targetId: r.targetId,
-      error: takedownError || null,
-    });
+    try {
+      await updateDoc(doc(db, "reports", r.id), {
+        resolvedAt: serverTimestamp(),
+        resolvedBy: CURRENT_UID,
+        resolution: "taken-down",
+        takedownError: takedownError || null,
+      });
+      await logAdminAction("mod-takedown", {
+        reportId: r.id, targetType: r.targetType, targetId: r.targetId,
+        error: takedownError || null,
+      });
+    } catch (err) {
+      showAdminNotice("Could not close report", err.message || String(err));
+      return;
+    }
     if (takedownError) {
       alert(`Report closed but the target could not be deleted (${takedownError}). Check the target doc manually.`);
     }
@@ -943,7 +1048,7 @@ async function logAdminAction(type, detail) {
 
   function setPreview(url, initial) {
     if (url) {
-      preview.style.backgroundImage = `url("${url}")`;
+      preview.style.backgroundImage = cssUrl(url);
       preview.textContent = "";
     } else {
       preview.style.backgroundImage = "";
@@ -1168,6 +1273,7 @@ async function logAdminAction(type, detail) {
     confirmBtn.textContent = "Signing out…";
     const theme = localStorage.getItem("theme");
     const legacy = localStorage.getItem("internsphere_theme");
+    stopSubscriptions(); // detach before the token goes away (avoids permission-denied noise)
     try { await signOut(auth); } catch (_) {}
     localStorage.clear();
     if (theme)  localStorage.setItem("theme", theme);

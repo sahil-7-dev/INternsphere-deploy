@@ -26,6 +26,20 @@ import { esc } from "./lib/escape.js";
 
 const $ = (id) => document.getElementById(id);
 
+// Only allow CV links that can't run script when clicked.
+function safeHref(url) {
+  const u = String(url || "").trim();
+  if (/^(https?:|blob:)/i.test(u)) return u;
+  if (/^data:application\/pdf[;,]/i.test(u)) return u;
+  return "";
+}
+
+function skillsList(v) {
+  return (Array.isArray(v) ? v : String(v || "").split(","))
+    .map((s) => String(s).trim())
+    .filter(Boolean);
+}
+
 // state
 let currentUid = null;
 let companyName = "";
@@ -71,25 +85,30 @@ function buildSystemPrompt() {
 }
 
 // data loading
-async function refreshData(uid) {
-  try {
-    const intSnap = await getDocs(query(
-      collection(db, "internships"),
-      where("companyId", "==", uid),
-    ));
-    internships = intSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  } catch (e) {
-    console.warn("[tars-company] internships:", e);
+// Every quick action used to re-read the whole internships + applications
+// collections. Reuse a fresh-enough copy and fetch both in parallel.
+const REFRESH_TTL_MS = 30_000;
+let lastRefreshAt = 0;
+let lastRefreshUid = null;
+async function refreshData(uid, { force = false } = {}) {
+  if (!force && uid === lastRefreshUid && Date.now() - lastRefreshAt < REFRESH_TTL_MS) return;
+  const [intRes, appsRes] = await Promise.allSettled([
+    getDocs(query(collection(db, "internships"), where("companyId", "==", uid))),
+    getDocs(query(collection(db, "applications"), where("companyId", "==", uid))),
+  ]);
+  if (intRes.status === "fulfilled") {
+    internships = intRes.value.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } else {
+    console.warn("[tars-company] internships:", intRes.reason);
   }
-
-  try {
-    const appsSnap = await getDocs(query(
-      collection(db, "applications"),
-      where("companyId", "==", uid),
-    ));
-    apps = appsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  } catch (e) {
-    console.warn("[tars-company] apps:", e);
+  if (appsRes.status === "fulfilled") {
+    apps = appsRes.value.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } else {
+    console.warn("[tars-company] apps:", appsRes.reason);
+  }
+  if (intRes.status === "fulfilled" && appsRes.status === "fulfilled") {
+    lastRefreshAt = Date.now();
+    lastRefreshUid = uid;
   }
 }
 
@@ -385,10 +404,7 @@ function actionRecent() {
 function actionSkillCoverage(roleId) {
   const role = internships.find((r) => r.id === roleId);
   if (!role) return showError("Role not found.");
-  const required = (role.skills || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const required = skillsList(role.skills);
 
   const roleApps = apps.filter((a) => a.internshipId === roleId);
   if (!roleApps.length) {
@@ -413,7 +429,7 @@ function actionSkillCoverage(roleId) {
     const skillCount = {};
     for (const arr of studentSkills) {
       for (const s of arr || []) {
-        const key = s.toLowerCase();
+        const key = String(s).toLowerCase();
         skillCount[key] = (skillCount[key] || 0) + 1;
       }
     }
@@ -443,14 +459,19 @@ function actionSkillCoverage(roleId) {
   })();
 }
 
-async function fetchStudentSkills(uid) {
-  if (!uid) return [];
-  try {
-    const snap = await getDoc(doc(db, "students", uid));
-    if (!snap.exists()) return [];
-    const d = snap.data();
-    return Array.isArray(d.skills) ? d.skills : [];
-  } catch { return []; }
+const studentSkillsCache = new Map(); // uid -> Promise<string[]>
+function fetchStudentSkills(uid) {
+  if (!uid) return Promise.resolve([]);
+  if (!studentSkillsCache.has(uid)) {
+    studentSkillsCache.set(uid, getDoc(doc(db, "students", uid))
+      .then((snap) => {
+        if (!snap.exists()) return [];
+        const d = snap.data();
+        return Array.isArray(d.skills) ? d.skills : [];
+      })
+      .catch(() => { studentSkillsCache.delete(uid); return []; }));
+  }
+  return studentSkillsCache.get(uid);
 }
 
 function actionInterviewNext() {
@@ -512,6 +533,11 @@ async function cvToDataUrl(app) {
 }
 
 async function summariseCv(app) {
+  // Check the summary cache before downloading the whole PDF.
+  if (app.cvData || app.cvUrl) {
+    const cachedFirst = loadCvSummary(app.id, app.cvSize);
+    if (cachedFirst) return cachedFirst;
+  }
   const dataUrl = await cvToDataUrl(app);
   if (!dataUrl) {
     return {
@@ -591,11 +617,18 @@ async function actionPromising(roleId) {
     const CANDIDATE_CAP = 20;
     const sliced = roleApps.slice(0, CANDIDATE_CAP);
 
-    const summaries = [];
-    for (const app of sliced) {
-      const s = await summariseCv(app);
-      summaries.push({ ...s, applicantId: app.id, email: app.email, phone: app.phone, role: role.title });
-    }
+    // Small concurrency pool instead of strictly one CV at a time.
+    const summaries = new Array(sliced.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < sliced.length) {
+        const idx = next++;
+        const app = sliced[idx];
+        const s = await summariseCv(app);
+        summaries[idx] = { ...s, applicantId: app.id, email: app.email, phone: app.phone, role: role.title };
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(3, sliced.length) }, worker));
     typing?.remove();
     status?.remove();
 
@@ -668,7 +701,7 @@ function rankedCardHtml(rank, app) {
       ${rank.verdict ? `<p style="font-size:0.85rem;margin:8px 0 6px;line-height:1.5">${esc(rank.verdict)}</p>` : ""}
       ${listBlock("Strengths", rank.strengths, "#22c55e")}
       ${listBlock("Gaps", rank.gaps, "#f59e0b")}
-      ${(app?.cvUrl || app?.cvData) ? `<a class="tars-applicant-cv" href="${esc(app.cvUrl || app.cvData)}" target="_blank" rel="noopener" download="${esc(app.cvName || "cv.pdf")}">📄 Download CV</a>` : ""}
+      ${safeHref(app?.cvUrl || app?.cvData) ? `<a class="tars-applicant-cv" href="${esc(safeHref(app.cvUrl || app.cvData))}" target="_blank" rel="noopener" download="${esc(app.cvName || "cv.pdf")}">📄 Download CV</a>` : ""}
     </div>`;
 }
 
@@ -700,7 +733,7 @@ function applicantCardHtml(app, opts = {}) {
           ${esc(opts.badge || status)}
         </span>
       </div>
-      ${(app.cvUrl || app.cvData) ? `<a class="tars-applicant-cv" href="${esc(app.cvUrl || app.cvData)}" target="_blank" rel="noopener" download="${esc(app.cvName || "cv.pdf")}">📄 ${esc(app.cvName || "cv.pdf")}</a>` : ""}
+      ${safeHref(app.cvUrl || app.cvData) ? `<a class="tars-applicant-cv" href="${esc(safeHref(app.cvUrl || app.cvData))}" target="_blank" rel="noopener" download="${esc(app.cvName || "cv.pdf")}">📄 ${esc(app.cvName || "cv.pdf")}</a>` : ""}
     </div>`;
 }
 
@@ -795,7 +828,7 @@ function init() {
       const snap = await getDoc(doc(db, "companies", user.uid));
       if (snap.exists()) companyName = snap.data().companyName || snap.data().name || "";
     } catch {}
-    await refreshData(user.uid);
+    await refreshData(user.uid, { force: true });
     renderRootMenu();
   });
 }

@@ -15,6 +15,8 @@
 //   RATE_LIMIT_REQUESTS   — max requests per window per user (default: 10)
 //   RATE_LIMIT_WINDOW_SEC — window size in seconds (default: 60)
 //   DAILY_LIMIT_REQUESTS  — max requests per day per user (default: 80)
+//   ALLOWED_MODELS        — comma-separated Gemini model ids clients may
+//     request (default: gemini-2.5-flash,gemini-2.5-flash-lite,gemini-2.0-flash)
 
 import { createVerify } from "crypto";
 
@@ -26,6 +28,20 @@ const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const RATE_LIMIT_REQUESTS   = parseInt(process.env.RATE_LIMIT_REQUESTS   || "10",  10);
 const RATE_LIMIT_WINDOW_SEC = parseInt(process.env.RATE_LIMIT_WINDOW_SEC || "60",  10);
 const DAILY_LIMIT_REQUESTS  = parseInt(process.env.DAILY_LIMIT_REQUESTS  || "80",  10);
+const ALLOWED_MODELS = (process.env.ALLOWED_MODELS ||
+  "gemini-2.5-flash,gemini-2.5-flash-lite,gemini-2.0-flash")
+  .split(",").map((s) => s.trim()).filter(Boolean);
+// Upstream must finish before the function's maxDuration (30s) kills us,
+// so the client gets a clean 504 instead of a platform timeout.
+const UPSTREAM_TIMEOUT_MS = 25_000;
+const AUX_TIMEOUT_MS      = 5_000;
+// Vercel caps request bodies at ~4.5 MB; reject a bit earlier with a
+// proper 413 the client already knows how to explain.
+const MAX_BODY_BYTES = 4_400_000;
+
+function fetchWithTimeout(url, opts = {}, ms = AUX_TIMEOUT_MS) {
+  return fetch(url, { ...opts, signal: AbortSignal.timeout(ms) });
+}
 
 // ---------------------------------------------------------------------------
 // Firebase token verification
@@ -40,9 +56,11 @@ async function getFirebasePublicKeys() {
   const now = Date.now();
   if (_cachedKeys && now < _cachedKeysExpiry) return _cachedKeys;
 
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
   );
+  // Don't cache an error body as the key set for an hour.
+  if (!res.ok) throw new Error(`Public key fetch failed (${res.status})`);
   const cacheControl = res.headers.get("cache-control") || "";
   const maxAgeMatch = cacheControl.match(/max-age=(\d+)/);
   const maxAge = maxAgeMatch ? parseInt(maxAgeMatch[1], 10) * 1000 : 3_600_000;
@@ -73,17 +91,24 @@ async function verifyFirebaseToken(idToken) {
 
   const now = Math.floor(Date.now() / 1000);
 
+  if (header.alg !== "RS256")
+    throw new Error("Unexpected token algorithm");
   if (!payload.exp || payload.exp < now)
     throw new Error("Token expired");
-  if (!payload.iat || now - payload.iat > 3600)
+  // 5-minute allowance for clock skew on iat / auth_time.
+  if (!payload.iat || payload.iat > now + 300 || now - payload.iat > 3600)
     throw new Error("Token too old");
+  if (payload.auth_time && payload.auth_time > now + 300)
+    throw new Error("Token auth_time in the future");
+  if (typeof payload.sub !== "string" || !payload.sub || payload.sub.length > 128)
+    throw new Error("Token subject missing");
   if (payload.aud !== projectId)
     throw new Error(`Token audience mismatch: got "${payload.aud}", expected "${projectId}"`);
   if (payload.iss !== `https://securetoken.google.com/${projectId}`)
     throw new Error(`Token issuer mismatch: got "${payload.iss}"`);
 
   const keys = await getFirebasePublicKeys();
-  const certPem = keys[header.kid];
+  const certPem = Object.prototype.hasOwnProperty.call(keys, header.kid) ? keys[header.kid] : null;
   if (!certPem) throw new Error(`Unknown token key ID: ${header.kid}`);
 
   // Use Node's crypto.createVerify directly with the PEM cert —
@@ -127,7 +152,7 @@ async function checkRateLimit(uid) {
     ["EXPIRE", dailyKey, 172800],
   ];
 
-  const res = await fetch(`${url}/pipeline`, {
+  const res = await fetchWithTimeout(`${url}/pipeline`, {
     method: "POST",
     headers: {
       Authorization:  `Bearer ${token}`,
@@ -139,8 +164,13 @@ async function checkRateLimit(uid) {
   if (!res.ok) throw new Error("Rate limit check failed");
 
   const results     = await res.json();
-  const minuteCount = results[2]?.result ?? results[2];
-  const dailyCount  = results[4]?.result ?? results[4];
+  const minuteCount = Number(results?.[2]?.result ?? results?.[2]);
+  const dailyCount  = Number(results?.[4]?.result ?? results?.[4]);
+  // A per-command error comes back as { error } — treat it like an outage
+  // (caller fails open) rather than comparing NaN and blocking everyone.
+  if (!Number.isFinite(minuteCount) || !Number.isFinite(dailyCount)) {
+    throw new Error("Rate limit response malformed");
+  }
 
   const minuteAllowed = minuteCount <= RATE_LIMIT_REQUESTS;
   const dailyAllowed  = dailyCount  <= DAILY_LIMIT_REQUESTS;
@@ -197,7 +227,12 @@ export default async function handler(req, res) {
   try {
     user = await verifyFirebaseToken(idToken);
   } catch (err) {
-    return res.status(401).json({ error: { message: `Invalid token: ${err.message}` } });
+    // Log the reason server-side; don't echo project ids / key ids back.
+    console.warn("[auth] token rejected:", err.message);
+    const status = /not configured|key fetch failed/i.test(err.message) ? 503 : 401;
+    return res.status(status).json({
+      error: { message: status === 401 ? "Invalid or expired token" : "Auth temporarily unavailable" },
+    });
   }
 
   // ── Rate limiting: 10 req/min + 80 req/day ───────────────────────────────
@@ -226,23 +261,47 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: { message: "GEMINI_API_KEY not configured" } });
   }
 
-  const { model, body } = req.body || {};
-  if (!model || !body || typeof body !== "object") {
+  let payload = req.body;
+  if (typeof payload === "string") {
+    try { payload = JSON.parse(payload); } catch { payload = null; }
+  }
+  const { model, body } = payload || {};
+  if (typeof model !== "string" || !body || typeof body !== "object" || Array.isArray(body)) {
     return res.status(400).json({ error: { message: "model and body required" } });
   }
+  if (!ALLOWED_MODELS.includes(model)) {
+    return res.status(400).json({ error: { message: `Model not allowed: ${model}` } });
+  }
+  if (!Array.isArray(body.contents) || body.contents.length === 0) {
+    return res.status(400).json({ error: { message: "body.contents must be a non-empty array" } });
+  }
 
-  const url = `${GEMINI_BASE}/${encodeURIComponent(model)}:generateContent?key=${key}`;
+  const upstreamBody = JSON.stringify(body);
+  if (Buffer.byteLength(upstreamBody) > MAX_BODY_BYTES) {
+    return res.status(413).json({ error: { message: "Request too large" } });
+  }
+
+  const url = `${GEMINI_BASE}/${encodeURIComponent(model)}:generateContent`;
 
   try {
     const upstream = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      // Key in a header rather than the query string so it never shows up
+      // in proxy / access logs.
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: upstreamBody,
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
 
     const text = await upstream.text();
-    res.status(upstream.status).setHeader("Content-Type", "application/json").send(text);
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(upstream.status).send(text);
   } catch (err) {
-    res.status(502).json({ error: { message: err.message || "Upstream error" } });
+    const timedOut = err?.name === "TimeoutError" || err?.name === "AbortError";
+    console.error("[gemini] upstream error:", err?.message);
+    return res.status(timedOut ? 504 : 502).json({
+      error: { message: timedOut ? "Upstream timed out" : "Upstream error" },
+    });
   }
 }

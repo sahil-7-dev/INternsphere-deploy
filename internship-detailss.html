@@ -22,7 +22,7 @@
     />
 
     <!-- AOS cdn -->
-    <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+    <link rel="stylesheet" href="https://unpkg.com/aos@3.0.0-beta.6/dist/aos.css" />
     <script defer src="https://unpkg.com/lenis@1.1.20/dist/lenis.min.js"></script>
     <script defer src="js/scroll-init.js"></script>
   </head>
@@ -85,8 +85,9 @@
                   ><img
                     src="assets/images/icons8-location-50.png"
                     alt=""
-                    width="38px"
-                    height="auto"
+                    width="38"
+                    height="38"
+                    decoding="async"
                 /></span>
                 <div>
                   <div class="meta-label">Location</div>
@@ -99,8 +100,9 @@
                   ><img
                     src="assets/images/icons8-time-48.png"
                     alt=""
-                    width="38px"
-                    height="auto"
+                    width="38"
+                    height="38"
+                    decoding="async"
                 /></span>
                 <div>
                   <div class="meta-label">Duration</div>
@@ -113,8 +115,9 @@
                   ><img
                     src="assets/images/icons8-dashboard-100.png"
                     alt=""
-                    width="38px"
-                    height="38px"
+                    width="38"
+                    height="38"
+                    decoding="async"
                 /></span>
                 <div>
                   <div class="meta-label">Salary</div>
@@ -143,7 +146,7 @@
                 // 1) If the listing passed a company-uploaded banner URL, use
                 //    it directly → no flash on the first paint.
                 var custom = params.get("hero");
-                if (custom) { el.src = custom; return; }
+                if (custom && /^https?:\/\//i.test(custom)) { el.src = custom; return; }
                 // 2) Fallback: deterministic pick from the dynamic folder,
                 //    hashed on the internship id so it's stable per role.
                 var imgs = [
@@ -252,21 +255,21 @@
   <div class="upload">
     <div class="upload-top">
       <span class="upload-label">Upload CV (PDF) *</span>
-      <span class="upload-hint" id="cvHint" style="font-size:0.78rem;opacity:0.65">Required · PDF only · max 5 MB</span>
+      <span class="upload-hint" id="cvHint" style="font-size:0.78rem;opacity:0.65">Required · PDF only · max 700 KB</span>
     </div>
 
-    <input type="file" id="cv" name="cv" accept="application/pdf,.pdf" style="display:none;" required />
+    <input type="file" id="cv" name="cv" accept="application/pdf,.pdf" style="display:none;" />
 
     <div class="upload-box" id="uploadBox" role="button" tabindex="0" aria-label="Click or drop a PDF CV">
       <div class="cloud">☁</div>
       <div>
         <div class="upload-main" id="cvMain">Click or drop your PDF CV</div>
-        <div class="upload-sub" id="cvSub">PDF up to 5 MB</div>
+        <div class="upload-sub" id="cvSub">PDF up to 700 KB</div>
       </div>
     </div>
 
     <!-- AI CV Feedback + Smart Pitch -->
-    <div class="ai-actions" id="aiActions" style="display:none;margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
+    <div class="ai-actions" id="aiActions" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
       <button type="button" class="btn-ai" id="cvFeedbackBtn">
         <span class="ai-spark">✦</span> Get AI feedback on my CV
       </button>
@@ -311,11 +314,18 @@
 
     
     <script type="module" src="js/guest-mode.js"></script>
-    <script src="js/sounds.js"></script>
+    <script defer src="js/sounds.js"></script>
     <script type="module" src="js/internship-details.js"></script>
 
-    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+    <script defer src="https://unpkg.com/aos@3.0.0-beta.6/dist/aos.js"></script>
     <script>
+      document.addEventListener("DOMContentLoaded", function () {
+      // AOS hides [data-aos] elements via CSS until it initialises — if the
+      // CDN fails, strip the attributes so the apply form stays visible.
+      if (!window.AOS) {
+        document.querySelectorAll("[data-aos]").forEach(function (el) { el.removeAttribute("data-aos"); });
+        return;
+      }
       AOS.init({
         // Global settings:
         disable: false, // accepts following values: 'phone', 'tablet', 'mobile', boolean, expression or function
@@ -335,6 +345,7 @@
         once: true, // whether animation should happen only once - while scrolling down
         mirror: false, // whether elements should animate out while scrolling past them
         anchorPlacement: "top-bottom", // defines which position of the element regarding to window should trigger the animation
+      });
       });
     </script>
 
@@ -379,8 +390,6 @@
     </div>
 
     <script src="js/theme.js"></script>
-    
-    <script type="module" src="js/main.js"></script>
     <script type="module" src="js/apply-ai.js"></script>
     <script type="module" src="js/internship-qa.js"></script>
     <script src="js/tars-resize.js" defer></script>

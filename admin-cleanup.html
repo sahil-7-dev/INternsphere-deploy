@@ -123,7 +123,7 @@
       getDocs,
       getDoc,
       doc,
-      deleteDoc,
+      writeBatch,
     } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 
     const authPill    = document.getElementById("authState");
@@ -134,23 +134,37 @@
     const companyIdEl = document.getElementById("companyId");
 
     let scanned = [];
+    let isAdminUser = false;
+
+    // Re-read the caller's role from Firestore. Used both on load and right
+    // before any destructive action, so a tab left open after a demotion /
+    // suspension / sign-out can't keep deleting (rules enforce this too).
+    async function confirmAdmin(user) {
+      if (!user) return false;
+      const snap = await getDoc(doc(db, "users", user.uid));
+      const d = snap.exists() ? snap.data() : {};
+      return d.role === "admin" && d.disabled !== true;
+    }
 
     function setStatus(msg) { statusEl.textContent = msg; }
 
     onAuthStateChanged(auth, async (user) => {
+      isAdminUser = false;
+      scanned = [];
+      scanBtn.disabled = true;
+      deleteBtn.disabled = true;
       if (!user) {
         authPill.className = "pill bad";
         authPill.textContent = "Not signed in — open /login.html first as an admin.";
         return;
       }
       try {
-        const snap = await getDoc(doc(db, "users", user.uid));
-        const role = snap.exists() ? snap.data().role : null;
-        if (role !== "admin") {
+        if (!(await confirmAdmin(user))) {
           authPill.className = "pill bad";
-          authPill.textContent = `Signed in as ${user.email} (role=${role || "unknown"}). Admin only.`;
+          authPill.textContent = `Signed in as ${user.email} — not an active admin. Admin only.`;
           return;
         }
+        isAdminUser = true;
         authPill.className = "pill good";
         authPill.textContent = `Admin: ${user.email}`;
         scanBtn.disabled = false;
@@ -162,6 +176,7 @@
     });
 
     scanBtn.addEventListener("click", async () => {
+      if (!isAdminUser) return;
       scanBtn.disabled = true;
       deleteBtn.disabled = true;
       setStatus("scanning…");
@@ -218,7 +233,7 @@
     });
 
     deleteBtn.addEventListener("click", async () => {
-      if (!scanned.length) return;
+      if (!scanned.length || !isAdminUser) return;
       const first = scanned.slice(0, 3).map(r => r.id).join(", ");
       const msg =
         `About to permanently DELETE ${scanned.length} application document(s).\n\n` +
@@ -232,19 +247,39 @@
 
       scanBtn.disabled = true;
       deleteBtn.disabled = true;
+
+      try {
+        if (!(await confirmAdmin(auth.currentUser))) {
+          isAdminUser = false;
+          setStatus("aborted — you are no longer an active admin");
+          return;
+        }
+      } catch (err) {
+        console.error(err);
+        setStatus("aborted — role re-check failed");
+        scanBtn.disabled = false;
+        deleteBtn.disabled = false;
+        return;
+      }
+
       setStatus(`deleting 0 / ${scanned.length}…`);
 
+      // Batched deletes (≤450 per commit) instead of one round-trip per doc.
+      const CHUNK = 450;
       let ok = 0;
       let fail = 0;
-      for (let i = 0; i < scanned.length; i++) {
+      for (let i = 0; i < scanned.length; i += CHUNK) {
+        const slice = scanned.slice(i, i + CHUNK);
+        const batch = writeBatch(db);
+        slice.forEach((r) => batch.delete(doc(db, "applications", r.id)));
         try {
-          await deleteDoc(doc(db, "applications", scanned[i].id));
-          ok += 1;
+          await batch.commit();
+          ok += slice.length;
         } catch (err) {
-          console.error("delete failed for", scanned[i].id, err);
-          fail += 1;
+          console.error("batch delete failed for", slice.map((r) => r.id), err);
+          fail += slice.length;
         }
-        setStatus(`deleting ${i + 1} / ${scanned.length}…`);
+        setStatus(`deleting ${Math.min(i + CHUNK, scanned.length)} / ${scanned.length}…`);
       }
 
       setStatus(`done — deleted ${ok}, failed ${fail}`);

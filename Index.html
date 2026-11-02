@@ -6,12 +6,13 @@
     <title>InternSphere — Virtual Internship Portal</title>
     <meta
       name="description"
-      content="InternSphere is a modern virtual internship portal to manage applications, tasks, and progress."i was
+      content="InternSphere is a modern virtual internship portal to manage applications, tasks, and progress."
     />
 
-    <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
-    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
-    <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin />
+    <!-- Firebase is only fetched when a guest-preview card is clicked, so a
+         DNS warm-up is enough here; full preconnects went unused on load. -->
+    <link rel="dns-prefetch" href="https://www.gstatic.com" />
+    <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -26,7 +27,7 @@
     />
     <link
       rel="stylesheet"
-      href="https://unpkg.com/aos@next/dist/aos.css"
+      href="https://unpkg.com/aos@3.0.0-beta.6/dist/aos.css"
     />
 
     <script>(function(){try{var t=localStorage.getItem("theme")||localStorage.getItem("internsphere_theme")||"dark",h=document.documentElement;h.classList.remove("dark","light","theme-dark","theme-light");if(t==="light"){h.classList.add("theme-light","light");h.style.colorScheme="light";h.style.backgroundColor="#f6f8fb"}else{h.classList.add("theme-dark","dark");h.style.colorScheme="dark";h.style.backgroundColor="#111113"}var s=document.createElement("style");s.textContent="html.theme-light body,html.light body{background:#f6f8fb;color:#0f172a}html.theme-dark body,html.dark body{background:#111113;color:rgba(255,255,255,0.95)}";(document.head||document.documentElement).appendChild(s)}catch(e){}})();</script>
@@ -52,6 +53,10 @@
             class="brand-logo"
             src="assets/images/Internsphere logo.png"
             alt="InternSphere logo"
+            width="256"
+            height="256"
+            decoding="async"
+            fetchpriority="high"
           />
           <span class="brand-name">InternSphere</span>
         </a>
@@ -62,7 +67,7 @@
             <li><a href="#features" class="nav-link">Features</a></li>
             <li><a href="#how" class="nav-link">How it works</a></li>
             <li><a href="mailto:InternSphere7@gmail.com?subject=InternSphere%20enquiry" class="nav-link">Contact</a></li>
-            <span class="nav-indicator" aria-hidden="true"></span>
+            <li class="nav-indicator" aria-hidden="true"></li>
           </ul>
         </nav>
 
@@ -302,7 +307,7 @@
           >
             <article class="card">
               <div class="card-ico">
-                <img loading="lazy" decoding="async" src="assets/images/AI icon.svg" alt="AI icon" />
+                <img loading="lazy" decoding="async" width="26" height="26" src="assets/images/AI icon.svg" alt="AI icon" />
               </div>
               <h3>TARS Resume Analyzer</h3>
               <p>Upload your CV and instantly see an ATS score, skill match, and concrete tips to improve your next application.</p>
@@ -316,7 +321,7 @@
 
             <article class="card">
               <div class="card-ico">
-                <img loading="lazy" decoding="async" src="assets/images/icons8-dashboards-32.png" alt="Dashboard icon" />
+                <img loading="lazy" decoding="async" width="26" height="26" src="assets/images/icons8-dashboards-32.png" alt="Dashboard icon" />
               </div>
               <h3>Smart Dashboard</h3>
               <p>Save roles for later, watch your application status, and see upcoming interviews at a glance.</p>
@@ -329,7 +334,7 @@
 
             <article class="card">
               <div class="card-ico">
-                <img loading="lazy" decoding="async" src="assets/images/icons8-work-50.png" alt="Workroom icon" />
+                <img loading="lazy" decoding="async" width="26" height="26" src="assets/images/icons8-work-50.png" alt="Workroom icon" />
               </div>
               <h3>Virtual Workroom</h3>
               <p>Once you're approved, step into a dedicated workroom — tasks, submissions, and feedback in one place.</p>
@@ -638,6 +643,10 @@
               class="brand-logo sm"
               src="assets/images/Internsphere logo.png"
               alt="InternSphere logo"
+              width="256"
+              height="256"
+              loading="lazy"
+              decoding="async"
             />
             <b>InternSphere</b>
           </div>
@@ -679,15 +688,19 @@
     <script defer src="https://unpkg.com/lenis@1.1.20/dist/lenis.min.js"></script>
     <script defer src="js/scroll-init.js"></script>
 
-    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+    <script defer src="https://unpkg.com/aos@3.0.0-beta.6/dist/aos.js"></script>
     <script>
-      AOS.init({
-        offset: 120,
-        duration: 700,
-        easing: "ease",
-        once: true,
-        mirror: false,
-        anchorPlacement: "top-bottom",
+      // aos.js is deferred, so it has run by the time DOMContentLoaded fires.
+      document.addEventListener("DOMContentLoaded", function () {
+        if (!window.AOS) return;
+        AOS.init({
+          offset: 120,
+          duration: 700,
+          easing: "ease",
+          once: true,
+          mirror: false,
+          anchorPlacement: "top-bottom",
+        });
       });
     </script>
 

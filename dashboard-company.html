@@ -76,7 +76,7 @@
   <!-- sidebar -->
   <aside class="sidebar" id="companySidebar">
     <div class="sidebar-brand">
-      <img decoding="async" class="brand-logo" src="assets/images/Internsphere logo.png" alt="InternSphere" />
+      <img decoding="async" class="brand-logo" src="assets/images/Internsphere logo.png" alt="InternSphere" width="256" height="256" />
       <span class="brand-name">InternSphere</span>
     </div>
 
@@ -695,7 +695,7 @@
 
 <!-- company tars -->
 <button class="tars-orb" id="coTarsOrb" type="button" aria-label="Ask TARS">
-  <img loading="lazy" decoding="async" class="tars-orb-img" src="assets/images/icons8-ai-64.png" alt="" aria-hidden="true">
+  <img loading="lazy" decoding="async" class="tars-orb-img" src="assets/images/icons8-ai-64.png" alt="" aria-hidden="true" width="64" height="64">
   <span class="tars-orb-label">TARS</span>
 </button>
 
@@ -703,7 +703,7 @@
   <div class="tars-chat-card">
     <div class="tars-chat-header">
       <div class="tars-chat-avatar">
-        <img loading="lazy" decoding="async" class="tars-chat-avatar-img" src="assets/images/icons8-ai-64.png" alt="" aria-hidden="true">
+        <img loading="lazy" decoding="async" class="tars-chat-avatar-img" src="assets/images/icons8-ai-64.png" alt="" aria-hidden="true" width="64" height="64">
       </div>
       <div class="tars-chat-id">
         <div class="tars-chat-kicker">Hiring Assistant</div>
@@ -733,14 +733,14 @@
 <script type="module" src="js/report.js"></script>
 <script type="module" src="js/company-onboarding.js"></script>
 <script type="module" src="js/guest-mode.js"></script>
-<script src="js/sounds.js"></script>
+<script src="js/sounds.js" defer></script>
 <script type="module" src="js/dashboard-company.js"></script>
 <script type="module" src="js/company-tasks.js"></script>
 <script type="module" src="js/tars-company.js"></script>
 <script src="js/tars-resize.js" defer></script>
 <script src="js/tars-effects.js" defer></script>
-<script src="js/ui-dynamic.js"></script>
-<script src="js/footer.js"></script>
+<script src="js/ui-dynamic.js" defer></script>
+<script src="js/footer.js" defer></script>
 <script>
   (function(){
     const btn = document.getElementById('mobileMenuBtn');
@@ -748,6 +748,9 @@
     const backdrop = document.getElementById('sidebarBackdrop');
     if (!btn || !sidebar || !backdrop) return;
     const close = () => {
+      // No-op when already closed: otherwise every resize / nav click reset
+      // body overflow and unlocked scrolling behind any open modal.
+      if (!sidebar.classList.contains('is-open')) return;
       sidebar.classList.remove('is-open');
       backdrop.classList.remove('is-open');
       document.body.style.overflow = '';
@@ -762,7 +765,14 @@
     });
     backdrop.addEventListener('click', close);
     sidebar.querySelectorAll('.nav-item').forEach(el => el.addEventListener('click', close));
-    window.addEventListener('resize', () => { if (window.innerWidth > 1024) close(); });
+    let resizeRaf = 0;
+    window.addEventListener('resize', () => {
+      if (resizeRaf) return;
+      resizeRaf = requestAnimationFrame(() => {
+        resizeRaf = 0;
+        if (window.innerWidth > 1024) close();
+      });
+    }, { passive: true });
   })();
 </script>
 
@@ -1012,6 +1022,6 @@
     </div>
   </div>
 </div>
-  <script src="js/modal-scroll-lock.js"></script>
+  <script src="js/modal-scroll-lock.js" defer></script>
 </body>
 </html>

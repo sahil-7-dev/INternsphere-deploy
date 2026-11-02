@@ -37,8 +37,8 @@
   <header class="topbar">
     <div class="container topbar-inner">
       <span class="brand" aria-label="hidden">
-        <img src="assets/images/Internsphere logo.png" alt="InternSphere logo" width="44px" height="auto"
-          class="brand-logo" />
+        <img src="assets/images/Internsphere logo.png" alt="InternSphere logo" width="58" height="58"
+          decoding="async" class="brand-logo" />
         <span class="brand-name">InternSphere</span>
       </span>
 
@@ -171,9 +171,12 @@
         <!-- Halloween scarecrow — looped throughout the session, click for red-eye glow -->
         <div id="scarecrowSidebar" class="scarecrow-sidebar" role="button" tabindex="0"
              aria-label="Scarecrow — click to make him glow">
+          <!-- src is attached lazily by the inline script below only while
+               body.halloween-on is set, so non-Halloween visitors never
+               download the clip. -->
           <video class="scarecrow-sidebar__video"
-                 src="assets/images/_cache/scarecrow%20.webm"
-                 autoplay loop muted playsinline aria-hidden="true"></video>
+                 data-src="assets/images/_cache/scarecrow%20.webm"
+                 preload="none" loop muted playsinline aria-hidden="true"></video>
           <span class="scarecrow-sidebar__eye scarecrow-sidebar__eye--left"  aria-hidden="true"></span>
           <span class="scarecrow-sidebar__eye scarecrow-sidebar__eye--right" aria-hidden="true"></span>
         </div>
@@ -1151,8 +1154,8 @@
   <script src="js/footer.js"></script>
   <script src="js/modal-scroll-lock.js"></script>
   <script src="js/sounds.js"></script>
-  <script src="js/offer-letter.js"></script>
-  <script src="js/certificate.js"></script>
+  <script src="js/offer-letter.js" defer></script>
+  <script src="js/certificate.js" defer></script>
 
   <!-- Scarecrow interactivity: pick a random quote on click, run the
        2-second red-eye glow, then sleep for 2 minutes (subtle 💤 above him,
@@ -1205,11 +1208,26 @@
             try { vid.currentTime = 0; } catch (_) {}
           }
         });
-        document.addEventListener("visibilitychange", () => {
-          if (!document.hidden && vid.paused) {
-            vid.play().catch(() => {});
+
+        // Only load/play the clip while the Halloween theme is active
+        // (internal-analytics.js toggles body.halloween-on) and the tab is
+        // visible; pause it otherwise so it doesn't decode in the background.
+        const syncScarecrowVideo = () => {
+          const on = document.body.classList.contains("halloween-on") && !document.hidden;
+          if (on) {
+            if (!vid.getAttribute("src") && vid.dataset.src) {
+              vid.preload = "auto";
+              vid.src = vid.dataset.src;
+            }
+            if (vid.paused) vid.play().catch(() => {});
+          } else if (!vid.paused) {
+            vid.pause();
           }
-        });
+        };
+        new MutationObserver(syncScarecrowVideo)
+          .observe(document.body, { attributes: true, attributeFilter: ["class"] });
+        document.addEventListener("visibilitychange", syncScarecrowVideo);
+        syncScarecrowVideo();
       }
 
       let asleep = false;

@@ -268,7 +268,7 @@
   <header class="topbar">
     <div class="container topbar-inner">
       <span class="brand" aria-label="hidden">
-        <img src="assets/images/Internsphere logo.png" alt="InternSphere logo" width="44px" height="auto" class="brand-logo" />
+        <img src="assets/images/Internsphere logo.png" alt="InternSphere logo" width="44" height="44" decoding="async" class="brand-logo" />
         <span class="brand-name">InternSphere</span>
       </span>
       <div class="topbar-mid"></div>
@@ -464,9 +464,11 @@
           h.style.colorScheme = "dark";
           if (ico) ico.textContent = "🌙"; if (lbl) lbl.textContent = "Dark";
         }
-        localStorage.setItem("theme", t);
+        try { localStorage.setItem("theme", t); } catch (e) {}
       }
-      applyTheme(localStorage.getItem("theme") || "dark");
+      var saved = null;
+      try { saved = localStorage.getItem("theme"); } catch (e) {}
+      applyTheme(saved || "dark");
       btn?.addEventListener("click", () => applyTheme(document.body.classList.contains("light") ? "dark" : "light"));
     })();
   </script>
